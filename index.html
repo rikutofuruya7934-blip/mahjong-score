@@ -391,7 +391,7 @@ function gameIds(s,g){
   return ids;
 }
 /* who pays the yakuman shugi: tsumo = everyone pays `amount`; ron = discarder pays amount×(n−1);
-   pao: ron → discarder and pao player split; tsumo → pao player pays half, the rest split the other half */
+   pao: ron → discarder and pao player split; tsumo → pao player pays in full */
 function shugiPay(y,ids){
   const pay={};if(!ids.includes(y.pid))return pay;
   if(y.how==='ron'&&(!ids.includes(y.from)||y.from===y.pid))return pay;
@@ -403,7 +403,7 @@ function shugiPay(y,ids){
     const unit=base*(Number(c.mult)||1),total=unit*others.length;if(!total)return;
     const pao=c.pao?paoP:null;
     if(y.how==='ron'){if(pao&&pao!==y.from){add(y.from,-total/2);add(pao,-total/2);}else add(y.from,-total);}
-    else if(pao){const rest=others.filter(o=>o!==pao);if(rest.length){add(pao,-total/2);rest.forEach(o=>add(o,-total/2/rest.length));}else add(pao,-total);}
+    else if(pao)add(pao,-total);
     else others.forEach(o=>add(o,-unit));
     add(y.pid,total);
   });
@@ -652,7 +652,7 @@ function yakuArea(s){
     +'<div class="field"><span class="lbl">役（複合したら追加。ダブル役満は×2）</span><div class="ykparts">'+rows+'</div><div><button type="button" class="btn sm ghost" data-act="yk-padd">＋ 複合した役を追加</button></div></div>'
     +'<datalist id="yk-names">'+YAKU.map(y=>'<option value="'+y+'"></option>').join('')+'</datalist>'
     +'<div class="field" id="yk-pao-f"'+(anyPao?'':' hidden')+'><label for="yk-pao">包の人</label><select class="in" id="yk-pao">'+memberOpts(s,ykPaoWho||s.members[2]||s.members[1])+'</select></div>'
-    +'<p class="hint" id="yk-sum">'+multName(m)+'（祝儀×'+m+'）。ツモは全員からオール、ロンは放銃者が全員分を払います。包の付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が半分・残り半分を他の人で割り、ほかの役の分は普通に払います。</p>'
+    +'<p class="hint" id="yk-sum">'+multName(m)+'（祝儀×'+m+'）。ツモは全員からオール、ロンは放銃者が全員分を払います。包の付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。</p>'
     +'<div class="formfoot"><span class="msg" id="yk-msg"></span><button type="button" class="btn sm ghost" data-act="yk-cancel">やめる</button><button type="button" class="btn sm" data-act="yk-add">この役満を追加</button></div></div>';
 }
 function syncYk(){
@@ -793,7 +793,7 @@ function renderSettings(){
     +'<li><b>スコアで入力</b>：2位以下の人とスコアを入れると、1位のスコアは合計が0になるように自動で入ります。トビや役満祝儀を含めた最終スコアを入れ、トビと役満は記録として残すだけです。</li>'
     +'<li><b>素点で入力</b>：2位以下は（素点 − 返し）÷ 1000 を、返し未満は切り上げ・返し以上は切り捨てで整数にし、順位点を足します。1位は2位以下の合計を全部引き受けるので、端数のズレは1位で調整されます。</li>'
     +'<li>素点入力のトビ：素点がマイナスの人（0点ちょうどは除く）がトビで、飛んだ人から飛ばした人へトビの点が移ります。</li>'
-    +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が半分・残り半分を他の人で割り、ほかの役の分は普通に払います。スコアに足されるのは素点入力のときだけで、スコア入力のときは記録として残ります。</li>'
+    +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。スコアに足されるのは素点入力のときだけで、スコア入力のときは記録として残ります。</li>'
     +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順（同点はメンバー欄で先に並んでいる人が上）です。</li>'
     +'<li>チップはスコアと同じ点数換算で、日ごとの浮き沈みを記録します。成績ではチップ込みとスコアのみの両方を出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
     +'<section><h2>データ</h2><p class="hint">全記録をテキスト（JSON）で書き出せます。バックアップや、Claudeに渡して記録を作ってもらうときに使います。</p><div class="formfoot" style="justify-content:flex-start"><button class="btn sm" data-act="copy-json">記録データをコピー</button><button class="btn sm" data-act="dl-json">ファイルで保存</button></div><div id="json-box"></div>'
@@ -866,7 +866,7 @@ function readSum(s){
   return {vals,filled,bad,auto:null};
 }
 function refreshTobi(){const a=$('#tb-area');const s=cur();if(a&&s)a.innerHTML=tobiArea(s);}
-function ykSumText(){const el=document.getElementById('yk-sum');if(!el)return;const m=ykParts.reduce((a,c)=>a+(Number(c.mult)||1),0);el.firstChild&&(el.firstChild.nodeValue=multName(m)+'（祝儀×'+m+'）。ツモは全員からオール、ロンは放銃者が全員分を払います。包の付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が半分・残り半分を他の人で割り、ほかの役の分は普通に払います。');}
+function ykSumText(){const el=document.getElementById('yk-sum');if(!el)return;const m=ykParts.reduce((a,c)=>a+(Number(c.mult)||1),0);el.firstChild&&(el.firstChild.nodeValue=multName(m)+'（祝儀×'+m+'）。ツモは全員からオール、ロンは放銃者が全員分を払います。包の付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。');}
 function refreshYaku(){const a=$('#yk-area');const s=cur();if(a&&s)a.innerHTML=yakuArea(s);}
 function syncRawTobi(vals){
   const s=cur();const busted=s.members.filter(id=>typeof vals[id]==='number'&&vals[id]<0);
