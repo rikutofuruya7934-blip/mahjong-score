@@ -185,6 +185,9 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 .tbrow .muted{color:var(--muted);font-size:.85rem}
 .preview{font-family:var(--num);font-size:.86rem;background:var(--surface-2);border-radius:8px;padding:8px 12px}
 .preview:empty{display:none}
+.ykparts{display:flex;flex-direction:column;gap:6px}
+.ykpart{display:grid;grid-template-columns:minmax(0,1fr) 4.6em auto auto;gap:6px;align-items:center}
+.ykpart .tobi{align-self:center;padding:4px 10px}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -330,7 +333,7 @@ const store={
 };
 const ui=Object.assign({tab:'log',sid:null,tMode:null,tYear:'all',tMin:0,tSort:'total'},store.get('mj-ui')||{});
 let newOpen=false,editOpen=false,confirmKey=null,mismatchArmed=false,nsMode=4;
-let gKind=store.get('mj-gkind')==='raw'?'raw':'pt',gEditId=null,gYaku=[],gTobi=[],ykOpen=false,ykHow='tsumo',ykPao=false;
+let gKind=store.get('mj-gkind')==='raw'?'raw':'pt',gEditId=null,gYaku=[],gTobi=[],ykOpen=false,ykHow='tsumo',ykParts=[],ykPid=null,ykFrom=null,ykPaoWho=null,ykAmt=null;
 let canWrite=false,busy=false,loginOpen=false,authUser=null,importDraft=null;
 const app=document.getElementById('app');
 const toastEl=document.createElement('div');toastEl.className='toast';toastEl.setAttribute('role','status');toastEl.setAttribute('aria-live','polite');
@@ -364,10 +367,18 @@ function parseIntLoose(str){const t=norm(str);if(t==='')return 0;if(!/^[+-]?\d+$
 function parseNum(str){const t=norm(str);if(!/^[+-]?\d+(\.\d+)?$/.test(t))return NaN;return parseFloat(t);}
 function umaText(u){return u.map(x=>sgn(x)+Math.abs(x)).join(' / ');}
 function ruleText(s){const r=s.rule;return fmtScore(r.start)+'持ち'+fmtScore(r.ret)+'返し・順位点 '+umaText(r.uma)+'・トビ±'+r.tobi+'・役満祝儀 '+r.shugi+'オール';}
+/* 役満: 1回の和了に複合した役を yakus:[{name,mult,pao}] で持つ（古い記録は name/pao から読み替え） */
+const DOUBLE_YAKU=['大四喜','純正九蓮宝燈','純正九蓮','国士無双十三面待ち','国士無双十三面','国士十三面','四暗刻単騎','四暗刻単騎待ち','スッタン'];
+const multOf=n=>DOUBLE_YAKU.includes(String(n||'').trim())?2:1;
+function yakuParts(y){return Array.isArray(y.yakus)&&y.yakus.length?y.yakus:[{name:y.name||'役満',mult:multOf(y.name),pao:!!y.pao}];}
+const yakuMult=y=>yakuParts(y).reduce((a,c)=>a+(Number(c.mult)||1),0);
+const multName=m=>m===1?'役満':m===2?'ダブル役満':m===3?'トリプル役満':m+'倍役満';
+function yakuNames(y){return yakuParts(y).map(c=>c.name+((Number(c.mult)||1)>1?'（×'+c.mult+'）':'')).join('＋');}
 function yakuDesc(y,n){
+  const parts=yakuParts(y),m=yakuMult(y),pp=parts.filter(c=>c.pao);
   let t=y.how==='tsumo'?'ツモ':'ロン（放銃：'+esc(pName(y.from))+'）';
-  if(y.pao)t+='・包：'+esc(pName(y.pao));
-  t+='・祝儀 '+(y.how==='tsumo'?y.amount+'オール':y.amount*(n-1));
+  if(y.pao&&pp.length)t+='・包：'+esc(pName(y.pao))+(parts.length>1?'（'+pp.map(c=>esc(c.name)).join('・')+'の分）':'');
+  t+='・祝儀 '+(Number(y.amount)||0)+(m>1?'×'+m:'')+(y.how==='tsumo'&&!pp.length?'オール':'')+'（計+'+absTxt(r1((Number(y.amount)||0)*m*(n-1)))+'）';
   return t;
 }
 
@@ -383,17 +394,19 @@ function gameIds(s,g){
    pao: ron → discarder and pao player split; tsumo → pao player pays half, the rest split the other half */
 function shugiPay(y,ids){
   const pay={};if(!ids.includes(y.pid))return pay;
-  const per=Number(y.amount)||0;const others=ids.filter(o=>o!==y.pid);const total=per*others.length;
+  if(y.how==='ron'&&(!ids.includes(y.from)||y.from===y.pid))return pay;
+  const base=Number(y.amount)||0,others=ids.filter(o=>o!==y.pid);
   const add=(id,v)=>{pay[id]=(pay[id]||0)+v;};
-  const pao=y.pao&&ids.includes(y.pao)&&y.pao!==y.pid?y.pao:null;
-  if(y.how==='ron'){
-    if(!ids.includes(y.from)||y.from===y.pid)return {};
-    if(pao&&pao!==y.from){add(y.from,-total/2);add(pao,-total/2);}else add(y.from,-total);
-  }else if(pao){
-    const rest=others.filter(o=>o!==pao);
-    if(rest.length){add(pao,-total/2);rest.forEach(o=>add(o,-total/2/rest.length));}else add(pao,-total);
-  }else others.forEach(o=>add(o,-per));
-  add(y.pid,total);
+  const paoP=y.pao&&ids.includes(y.pao)&&y.pao!==y.pid?y.pao:null;
+  /* 複合役満は役ごとに計算。包が付いた役の分だけ包のルール、それ以外の役の分は普通に払う */
+  yakuParts(y).forEach(c=>{
+    const unit=base*(Number(c.mult)||1),total=unit*others.length;if(!total)return;
+    const pao=c.pao?paoP:null;
+    if(y.how==='ron'){if(pao&&pao!==y.from){add(y.from,-total/2);add(pao,-total/2);}else add(y.from,-total);}
+    else if(pao){const rest=others.filter(o=>o!==pao);if(rest.length){add(pao,-total/2);rest.forEach(o=>add(o,-total/2/rest.length));}else add(pao,-total);}
+    else others.forEach(o=>add(o,-unit));
+    add(y.pid,total);
+  });
   return pay;
 }
 function gameResult(s,g){
@@ -622,19 +635,33 @@ function tobiArea(s){
 }
 function yakuArea(s){
   let h='<span class="lbl">役満</span>';
-  if(gYaku.length)h+='<ul class="yklist">'+gYaku.map((y,i)=>'<li><span class="badge yk">役満</span><b>'+esc(pName(y.pid))+'</b><span>'+esc(y.name)+'</span><span class="muted">'+yakuDesc(y,s.mode)+'</span><button type="button" class="btn xs ghost" data-act="yk-del" data-i="'+i+'" aria-label="この役満を取り消す">×</button></li>').join('')+'</ul>';
+  if(gYaku.length)h+='<ul class="yklist">'+gYaku.map((y,i)=>'<li><span class="badge yk">'+multName(yakuMult(y))+'</span><b>'+esc(pName(y.pid))+'</b><span>'+esc(yakuNames(y))+'</span><span class="muted">'+yakuDesc(y,s.mode)+'</span><button type="button" class="btn xs ghost" data-act="yk-del" data-i="'+i+'" aria-label="この役満を取り消す">×</button></li>').join('')+'</ul>';
   if(!ykOpen)return h+'<div><button type="button" class="btn sm" data-act="yk-open">＋ この半荘の役満を記録</button></div>';
+  const anyPao=ykParts.some(c=>c.pao);
+  const rows=ykParts.map((c,i)=>'<div class="ykpart"><input class="in yk-name" id="yk-name-'+i+'" data-i="'+i+'" list="yk-names" placeholder="'+(i?'字一色':'大三元')+'" autocomplete="off" maxlength="30" value="'+esc(c.name)+'" aria-label="役'+(i+1)+'">'
+    +'<select class="in yk-mult" id="yk-mult-'+i+'" data-i="'+i+'" aria-label="倍率">'+[1,2,3].map(m=>'<option value="'+m+'"'+(Number(c.mult)===m?' selected':'')+'>×'+m+'</option>').join('')+'</select>'
+    +'<button type="button" class="tobi" data-act="yk-ppao" data-i="'+i+'" aria-pressed="'+!!c.pao+'" title="この役が包">包</button>'
+    +(ykParts.length>1?'<button type="button" class="btn xs ghost" data-act="yk-prm" data-i="'+i+'" aria-label="この役を外す">×</button>':'')+'</div>').join('');
+  const m=ykParts.reduce((a,c)=>a+(Number(c.mult)||1),0);
   return h+'<div class="ykform"><div class="ykgrid">'
-    +'<div class="field"><label for="yk-pid">和了した人</label><select class="in" id="yk-pid">'+memberOpts(s,s.members[0])+'</select></div>'
-    +'<div class="field"><label for="yk-name">役</label><input class="in" id="yk-name" list="yk-names" placeholder="四暗刻" autocomplete="off" maxlength="30"><datalist id="yk-names">'+YAKU.map(y=>'<option value="'+y+'"></option>').join('')+'</datalist></div>'
+    +'<div class="field"><label for="yk-pid">和了した人</label><select class="in" id="yk-pid">'+memberOpts(s,ykPid||s.members[0])+'</select></div>'
     +'<div class="field"><span class="lbl">和了の形</span><div class="seg" role="group" aria-label="和了の形">'+[['tsumo','ツモ'],['ron','ロン']].map(x=>'<button type="button" class="segb" data-act="yk-how" data-v="'+x[0]+'" aria-pressed="'+(ykHow===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>'
-    +'<div class="field" id="yk-from-f"'+(ykHow==='ron'?'':' hidden')+'><label for="yk-from">放銃した人</label><select class="in" id="yk-from">'+memberOpts(s,s.members[1])+'</select></div>'
-    +'<div class="field"><span class="lbl">包（パオ）</span><button type="button" class="tobi" data-act="yk-pao" aria-pressed="'+ykPao+'">包あり</button></div>'
-    +'<div class="field" id="yk-pao-f"'+(ykPao?'':' hidden')+'><label for="yk-pao">包の人</label><select class="in" id="yk-pao">'+memberOpts(s,s.members[2]||s.members[1])+'</select></div>'
-    +'<div class="field"><label for="yk-amt">祝儀（オール）</label><input class="in num" id="yk-amt" inputmode="decimal" value="'+s.rule.shugi+'"></div>'
-    +'</div><p class="hint">ツモは全員からオール、ロンは放銃者が全員分（四麻なら3人分、三麻なら2人分）を払います。包はロンなら放銃者と包の人で折半、ツモなら包の人が半分、残り半分を他の人で割ります。</p>'
+    +'<div class="field" id="yk-from-f"'+(ykHow==='ron'?'':' hidden')+'><label for="yk-from">放銃した人</label><select class="in" id="yk-from">'+memberOpts(s,ykFrom||s.members[1])+'</select></div>'
+    +'<div class="field"><label for="yk-amt">祝儀（役満1つ分のオール）</label><input class="in num" id="yk-amt" inputmode="decimal" value="'+(ykAmt!==null?esc(ykAmt):s.rule.shugi)+'"></div>'
+    +'</div>'
+    +'<div class="field"><span class="lbl">役（複合したら追加。ダブル役満は×2）</span><div class="ykparts">'+rows+'</div><div><button type="button" class="btn sm ghost" data-act="yk-padd">＋ 複合した役を追加</button></div></div>'
+    +'<datalist id="yk-names">'+YAKU.map(y=>'<option value="'+y+'"></option>').join('')+'</datalist>'
+    +'<div class="field" id="yk-pao-f"'+(anyPao?'':' hidden')+'><label for="yk-pao">包の人</label><select class="in" id="yk-pao">'+memberOpts(s,ykPaoWho||s.members[2]||s.members[1])+'</select></div>'
+    +'<p class="hint" id="yk-sum">'+multName(m)+'（祝儀×'+m+'）。ツモは全員からオール、ロンは放銃者が全員分を払います。包の付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が半分・残り半分を他の人で割り、ほかの役の分は普通に払います。</p>'
     +'<div class="formfoot"><span class="msg" id="yk-msg"></span><button type="button" class="btn sm ghost" data-act="yk-cancel">やめる</button><button type="button" class="btn sm" data-act="yk-add">この役満を追加</button></div></div>';
 }
+function syncYk(){
+  const v=id=>{const el=document.getElementById(id);return el?el.value:null;};
+  if(!document.getElementById('yk-pid'))return;
+  ykPid=v('yk-pid');ykFrom=v('yk-from');ykPaoWho=v('yk-pao');ykAmt=v('yk-amt');
+  ykParts.forEach((c,i)=>{const n=v('yk-name-'+i),m=v('yk-mult-'+i);if(n!==null)c.name=n.trim();if(m!==null)c.mult=Number(m)||1;});
+}
+function newYkPart(){return {name:'',mult:1,pao:false,auto:true};}
 function fillGameForm(g){
   if(g.summary){for(const id in g.pts){const el=document.getElementById('g-'+id);if(el)el.value=String(g.pts[id]);}const c=document.getElementById('g-cnt');if(c)c.value=String(g.count||'');return;}
   if(g.pts&&Array.isArray(g.order)){
@@ -677,7 +704,7 @@ function renderSession(s){
     +'<div class="formfoot"><span class="msg" id="c-msg"></span><button class="btn sm" data-act="save-chips">チップを保存</button></div></div>';
   h+='</section>';
   const yks=[];s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({y,no:nos[i].label})));
-  if(yks.length)h+='<section><h3>この日の役満</h3><ul class="yklist">'+yks.map(o=>'<li><span class="when">半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(o.y.name)+'</span><span class="muted">'+yakuDesc(o.y,s.mode)+'</span></li>').join('')+'</ul></section>';
+  if(yks.length)h+='<section><h3>この日の役満</h3><ul class="yklist">'+yks.map(o=>'<li><span class="when">半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(yakuNames(o.y))+'</span><span class="muted">'+yakuDesc(o.y,s.mode)+'</span></li>').join('')+'</ul></section>';
   if(w){
     h+=gameForm(s);
     const dk='s:'+s.id;
@@ -725,7 +752,7 @@ function renderTotals(){
   const yks=[];
   list.forEach(s=>{const nos=gameNos(s);s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({s,y,no:nos[i].label,st:nos[i].start})));});
   yks.sort((a,b)=>b.s.date.localeCompare(a.s.date)||b.st-a.st);
-  h+='<section><h3>役満の記録</h3>'+(yks.length?'<ul class="yklist">'+yks.map(o=>'<li><span class="when">'+shortDate(o.s.date)+' 半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(o.y.name)+'</span><span class="muted">'+yakuDesc(o.y,o.s.mode)+'</span></li>').join('')+'</ul>':'<p class="hint">この条件ではまだ役満は出ていません。</p>')+'</section>';
+  h+='<section><h3>役満の記録</h3>'+(yks.length?'<ul class="yklist">'+yks.map(o=>'<li><span class="when">'+shortDate(o.s.date)+' 半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(yakuNames(o.y))+'</span><span class="muted">'+yakuDesc(o.y,o.s.mode)+'</span></li>').join('')+'</ul>':'<p class="hint">この条件ではまだ役満は出ていません。</p>')+'</section>';
   const played=ids.filter(id=>t[id].games>0);
   const rated=played.filter(id=>t[id].games>=tMin);
   const minNote=tMin?tMin+'半荘以上':'';
@@ -766,7 +793,7 @@ function renderSettings(){
     +'<li><b>スコアで入力</b>：2位以下の人とスコアを入れると、1位のスコアは合計が0になるように自動で入ります。トビや役満祝儀を含めた最終スコアを入れ、トビと役満は記録として残すだけです。</li>'
     +'<li><b>素点で入力</b>：2位以下は（素点 − 返し）÷ 1000 を、返し未満は切り上げ・返し以上は切り捨てで整数にし、順位点を足します。1位は2位以下の合計を全部引き受けるので、端数のズレは1位で調整されます。</li>'
     +'<li>素点入力のトビ：素点がマイナスの人（0点ちょうどは除く）がトビで、飛んだ人から飛ばした人へトビの点が移ります。</li>'
-    +'<li>素点入力の役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。包はロンなら放銃者と包の人で折半、ツモなら包の人が半分、残り半分を他の人で割ります。</li>'
+    +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が半分・残り半分を他の人で割り、ほかの役の分は普通に払います。スコアに足されるのは素点入力のときだけで、スコア入力のときは記録として残ります。</li>'
     +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順（同点はメンバー欄で先に並んでいる人が上）です。</li>'
     +'<li>チップはスコアと同じ点数換算で、日ごとの浮き沈みを記録します。成績ではチップ込みとスコアのみの両方を出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
     +'<section><h2>データ</h2><p class="hint">全記録をテキスト（JSON）で書き出せます。バックアップや、Claudeに渡して記録を作ってもらうときに使います。</p><div class="formfoot" style="justify-content:flex-start"><button class="btn sm" data-act="copy-json">記録データをコピー</button><button class="btn sm" data-act="dl-json">ファイルで保存</button></div><div id="json-box"></div>'
@@ -839,6 +866,7 @@ function readSum(s){
   return {vals,filled,bad,auto:null};
 }
 function refreshTobi(){const a=$('#tb-area');const s=cur();if(a&&s)a.innerHTML=tobiArea(s);}
+function ykSumText(){const el=document.getElementById('yk-sum');if(!el)return;const m=ykParts.reduce((a,c)=>a+(Number(c.mult)||1),0);el.firstChild&&(el.firstChild.nodeValue=multName(m)+'（祝儀×'+m+'）。ツモは全員からオール、ロンは放銃者が全員分を払います。包の付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が半分・残り半分を他の人で割り、ほかの役の分は普通に払います。');}
 function refreshYaku(){const a=$('#yk-area');const s=cur();if(a&&s)a.innerHTML=yakuArea(s);}
 function syncRawTobi(vals){
   const s=cur();const busted=s.members.filter(id=>typeof vals[id]==='number'&&vals[id]<0);
@@ -885,7 +913,7 @@ function updateChipSum(){
 }
 
 /* ---------- actions ---------- */
-function resetGameForm(){gEditId=null;gYaku=[];gTobi=[];ykOpen=false;ykHow='tsumo';ykPao=false;}
+function resetGameForm(){gEditId=null;gYaku=[];gTobi=[];ykOpen=false;ykHow='tsumo';ykParts=[];ykPid=ykFrom=ykPaoWho=ykAmt=null;}
 function nav(patch){Object.assign(ui,patch);newOpen=false;editOpen=false;confirmKey=null;resetGameForm();persistUi();render();window.scrollTo(0,0);}
 const act={
   tab(b){nav({tab:b.dataset.tab,sid:null});},
@@ -931,26 +959,30 @@ const act={
   'tb-del'(b){gTobi.splice(Number(b.dataset.i),1);refreshTobi();},
   'edit-game'(b){
     const s=cur();const g=s.games.find(x=>x.id===b.dataset.gid);if(!g)return;
-    gEditId=g.id;gKind=g.summary?'sum':g.pts?'pt':'raw';gYaku=clone(g.yaku||[]);gTobi=clone(g.tobis||[]);ykOpen=false;ykHow='tsumo';ykPao=false;
+    gEditId=g.id;gKind=g.summary?'sum':g.pts?'pt':'raw';gYaku=clone(g.yaku||[]);gTobi=clone(g.tobis||[]);ykOpen=false;ykHow='tsumo';ykParts=[];
     render();const f=$('#addgame');if(f)f.scrollIntoView({block:'start',behavior:'smooth'});
   },
   'g-cancel'(){resetGameForm();render();},
-  'yk-open'(){ykOpen=true;ykHow='tsumo';ykPao=false;refreshYaku();const el=$('#yk-name');if(el)el.focus();},
+  'yk-open'(){ykOpen=true;ykHow='tsumo';ykParts=[newYkPart()];ykPid=ykFrom=ykPaoWho=ykAmt=null;refreshYaku();const el=$('#yk-name-0');if(el)el.focus();},
+  'yk-padd'(){syncYk();ykParts.push(newYkPart());refreshYaku();const el=$('#yk-name-'+(ykParts.length-1));if(el)el.focus();},
+  'yk-prm'(b){syncYk();ykParts.splice(Number(b.dataset.i),1);refreshYaku();},
+  'yk-ppao'(b){syncYk();const c=ykParts[Number(b.dataset.i)];if(c)c.pao=!c.pao;refreshYaku();},
   'yk-cancel'(){ykOpen=false;refreshYaku();},
   'yk-how'(b){
     ykHow=b.dataset.v;
     document.querySelectorAll('[data-act="yk-how"]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
     $('#yk-from-f').hidden=ykHow!=='ron';
   },
-  'yk-pao'(b){ykPao=!ykPao;b.setAttribute('aria-pressed',String(ykPao));$('#yk-pao-f').hidden=!ykPao;},
   'yk-add'(){
-    const pid=$('#yk-pid').value;const name=$('#yk-name').value.trim();const amt=parseNum($('#yk-amt').value);
-    if(!name)return setMsg('yk-msg','役の名前を入れてください','err');
+    syncYk();
+    const parts=ykParts.filter(c=>c.name).map(c=>({name:c.name,mult:Number(c.mult)||1,pao:!!c.pao}));
+    if(!parts.length)return setMsg('yk-msg','役の名前を入れてください','err');
+    const amt=parseNum(ykAmt);
     if(!isFinite(amt)||amt<0)return setMsg('yk-msg','祝儀を0以上の数字で入れてください','err');
-    const y={pid,name,how:ykHow,amount:amt};
-    if(ykHow==='ron'){y.from=$('#yk-from').value;if(y.from===pid)return setMsg('yk-msg','和了した人と放銃した人が同じです','err');}
-    if(ykPao){y.pao=$('#yk-pao').value;if(y.pao===pid)return setMsg('yk-msg','和了した人と包の人が同じです','err');}
-    gYaku.push(y);ykOpen=false;refreshYaku();updateGameSum();
+    const y={pid:ykPid,name:parts.map(c=>c.name).join('＋'),how:ykHow,amount:amt,yakus:parts};
+    if(ykHow==='ron'){y.from=ykFrom;if(y.from===y.pid)return setMsg('yk-msg','和了した人と放銃した人が同じです','err');}
+    if(parts.some(c=>c.pao)){y.pao=ykPaoWho;if(y.pao===y.pid)return setMsg('yk-msg','和了した人と包の人が同じです','err');}
+    gYaku.push(y);ykOpen=false;ykParts=[];refreshYaku();updateGameSum();
   },
   'yk-del'(b){gYaku.splice(Number(b.dataset.i),1);refreshYaku();updateGameSum();},
   'add-game'(){
@@ -992,7 +1024,7 @@ const act={
       if(y.how==='ron'&&!ids.includes(y.from))return setMsg('g-msg','放銃した '+pName(y.from)+' がこの半荘に入っていません','err');
       if(y.pao&&!ids.includes(y.pao))return setMsg('g-msg','包の '+pName(y.pao)+' がこの半荘に入っていません','err');
     }
-    if(ykOpen&&$('#yk-name')&&$('#yk-name').value.trim())return setMsg('g-msg','記録中の役満があります。「この役満を追加」か「やめる」を押してください','err');
+    if(ykOpen&&[...document.querySelectorAll('.yk-name')].some(e=>e.value.trim()))return setMsg('g-msg','記録中の役満があります。「この役満を追加」か「やめる」を押してください','err');
     if(gTobi.length)game.tobis=clone(gTobi);
     if(gYaku.length)game.yaku=clone(gYaku);
     const editing=gEditId;
@@ -1105,6 +1137,7 @@ document.addEventListener('input',e=>{
   const t=e.target;
   if(t.classList.contains('g-in'))updateGameSum();
   else if(t.classList.contains('chip-in'))updateChipSum();
+  else if(t.classList.contains('yk-name')){const c=ykParts[Number(t.dataset.i)];if(c){c.name=t.value.trim();if(c.auto){c.mult=multOf(c.name);const s=document.getElementById('yk-mult-'+t.dataset.i);if(s)s.value=String(c.mult);ykSumText();}}}
   else{const m=/^(n|e|d4|d3)-(start|ret|uma-\d)$/.exec(t.id);if(m)refreshUma0(m[1]);}
 });
 document.addEventListener('change',e=>{
@@ -1114,6 +1147,7 @@ document.addEventListener('change',e=>{
   else if(t.classList.contains('g-sel'))updateGameSum();
   else if(t.classList.contains('tb-pid')){gTobi[Number(t.dataset.i)].pid=t.value;}
   else if(t.classList.contains('tb-by')){gTobi[Number(t.dataset.i)].by=t.value;updateGameSum();}
+  else if(t.classList.contains('yk-mult')){const c=ykParts[Number(t.dataset.i)];if(c){c.mult=Number(t.value)||1;c.auto=false;ykSumText();}}
 });
 document.addEventListener('keydown',e=>{
   if(e.key!=='Enter'||e.isComposing)return;
