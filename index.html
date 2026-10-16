@@ -217,6 +217,8 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 .once b{color:var(--gold)}
 .dupwarn{display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--minus) 10%,transparent);border:1px solid var(--minus);border-radius:10px;padding:10px 12px;font-size:.88rem}
 .dupwarn .formfoot{justify-content:flex-start}
+#addgame .gform .inrow{align-items:center}
+#addgame .gform .unit{flex:none;font-family:var(--num);font-weight:600;color:var(--muted);padding:0 2px 0 3px;font-size:1rem}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -394,7 +396,7 @@ function fmtDate(s){const a=String(s).split('-').map(Number);if(!a[0])return esc
 function shortDate(s){const a=String(s).split('-').map(Number);return a[0]?a[0]+'/'+a[1]+'/'+a[2]:esc(s);}
 function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function norm(str){return String(str||'').trim().replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/[▲△−ー－‐]/g,'-').replace(/＋/g,'+').replace(/[,，\s]/g,'').replace(/．/g,'.');}
-function parseScore(str){const t=norm(str);if(t==='')return null;if(!/^[+-]?\d+$/.test(t))return NaN;let v=parseInt(t,10);if(Math.abs(v)<1000)v*=100;return v;}
+function parseScore(str){const t=norm(str);if(t==='')return null;if(!/^[+-]?\d+$/.test(t))return NaN;return parseInt(t,10)*100;}
 function parsePtIn(str){const t=norm(str);if(t==='')return null;if(!/^[+-]?\d+(\.\d+)?$/.test(t))return NaN;return parseFloat(t);}
 function parseIntLoose(str){const t=norm(str);if(t==='')return 0;if(!/^[+-]?\d+$/.test(t))return NaN;return parseInt(t,10);}
 function parseNum(str){const t=norm(str);if(!/^[+-]?\d+(\.\d+)?$/.test(t))return NaN;return parseFloat(t);}
@@ -663,8 +665,8 @@ function gameForm(s){
     body='<div class="field" style="max-width:200px"><label for="g-cnt">何半荘分の合計か</label><input class="in num" id="g-cnt" inputmode="numeric" autocomplete="off" placeholder="8"></div>'
       +'<div class="gform">'+s.members.map(id=>'<div class="field gfield"><label for="g-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('g-'+id)+'<input class="in num g-in" id="g-'+id+'" inputmode="numeric" autocomplete="off" placeholder="0"></div></div>').join('')+'</div>';
   }else{
-    hint='終局の点数（素点）を入れると、順位点・トビ・役満祝儀を含めたスコアを計算します。百点単位でもOK（323 → 32,300）。'+(fill?'最後の1人は空欄なら自動で計算します。':'抜け番の人は空欄のままにします。');
-    body='<div class="gform">'+s.members.map(id=>'<div class="field gfield"><label for="g-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('g-'+id)+'<input class="in num g-in" id="g-'+id+'" inputmode="numeric" autocomplete="off" placeholder="'+s.rule.start+'"></div></div>').join('')+'</div><p class="preview" id="g-prev"></p>';
+    hint='終局の点数（素点）を入れると、順位点・トビ・役満祝儀を含めたスコアを計算します。百の位まで入れてください（323 → 32,300）。下2桁の00は固定です。'+(fill?'最後の1人は空欄なら自動で計算します。':'抜け番の人は空欄のままにします。');
+    body='<div class="gform">'+s.members.map(id=>'<div class="field gfield"><label for="g-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('g-'+id)+'<input class="in num g-in" id="g-'+id+'" inputmode="numeric" autocomplete="off" placeholder="'+(s.rule.start/100)+'"><span class="unit">00</span></div></div>').join('')+'</div><p class="preview" id="g-prev"></p>';
   }
   return '<section class="panel" id="addgame"><div class="sechead"><h3>'+(editing?'半荘'+no+'を編集':'半荘'+no+'の記録')+'</h3>'
     +'<div class="seg" role="group" aria-label="入力方法">'+[['pt','スコア入力'],['raw','素点入力'],['sum','まとめ入力']].map(x=>'<button type="button" class="segb" data-act="g-kind" data-v="'+x[0]+'" aria-pressed="'+(gKind===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>'
@@ -733,7 +735,7 @@ function fillGameForm(g){
     const rr=gameResult(cur(),g);
     g.order.forEach((id,i)=>{const sel=document.getElementById('gs-'+i);if(sel)sel.value=id;if(i>0){const el=document.getElementById('gv-'+i);if(el)el.value=String(rr[id]?rr[id].base:g.pts[id]);}});
   }else if(g.scores){
-    for(const id in g.scores){const el=document.getElementById('g-'+id);if(el)el.value=String(g.scores[id]);}
+    for(const id in g.scores){const el=document.getElementById('g-'+id);if(el)el.value=String(Math.round(g.scores[id]/100));}
   }
 }
 function renderSession(s){
@@ -978,7 +980,7 @@ function updateGameSum(){
     return setMsg('g-msg','1位 '+pName(g.order[0])+' は '+fmtPt(g.top)+' になります','ok');
   }
   const g=readRaw(s);const prev=$('#g-prev');
-  s.members.forEach(id=>{const el=document.getElementById('g-'+id);if(el)el.placeholder=id===g.auto?'自動: '+g.vals[id]:String(s.rule.start);});
+  s.members.forEach(id=>{const el=document.getElementById('g-'+id);if(el)el.placeholder=id===g.auto?'自動: '+(g.vals[id]/100):String(s.rule.start/100);});
   if(g.bad){if(prev)prev.textContent='';return setMsg('g-msg','数字以外が入っています','err');}
   syncRawTobi(g.vals);
   const target=s.rule.start*s.mode;let sum=0;for(const k in g.vals)sum+=g.vals[k];
