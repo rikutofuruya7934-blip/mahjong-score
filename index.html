@@ -425,12 +425,21 @@ function gameResult(s,g){
   const r=s.rule,ids=gameIds(s,g),out={},tob=g.tobis||[];
   if(g.pts){
     const order=Array.isArray(g.order)?ids:ids.slice().sort((a,b)=>(g.pts[b]-g.pts[a])||(ids.indexOf(a)-ids.indexOf(b)));
-    order.forEach((id,i)=>{out[id]={rank:i+1,pt:g.pts[id],raw:null,shugi:0};});
+    order.forEach((id,i)=>{out[id]={rank:i+1,pt:g.pts[id],raw:null,shugi:0,last:i===order.length-1};});
   }else{
     const order=ids.slice().sort((a,b)=>(g.scores[b]-g.scores[a])||(ids.indexOf(a)-ids.indexOf(b)));
+    /* 同じ素点の人は同着：順位点を平均して分け合い、同じスコアになる。1位グループは残り全員の合計を等分 */
+    const n=order.length,groups=[];
+    order.forEach((id,i)=>{const gr=groups[groups.length-1];if(gr&&g.scores[gr.ids[0]]===g.scores[id]){gr.ids.push(id);gr.pos.push(i);}else groups.push({ids:[id],pos:[i]});});
     let rest=0;
-    order.forEach((id,i)=>{if(i===0)return;const raw=g.scores[id];const b=Math.trunc((raw-r.ret)/1000)+(r.uma[i]||0);out[id]={rank:i+1,raw,base:b};rest+=b;});
-    if(order.length)out[order[0]]={rank:1,raw:g.scores[order[0]],base:-rest};
+    groups.forEach(gr=>{
+      const tie=gr.ids.length>1,last=gr.pos.includes(n-1);
+      gr.ids.forEach(id=>{out[id]={rank:gr.pos[0]+1,raw:g.scores[id],tie,last};});
+      if(gr.pos[0]===0)return;
+      const uma=gr.pos.reduce((a,p)=>a+(r.uma[p]||0),0)/gr.ids.length;
+      gr.ids.forEach(id=>{const b=Math.trunc((g.scores[id]-r.ret)/1000)+uma;out[id].base=b;rest+=b;});
+    });
+    if(groups.length)groups[0].ids.forEach(id=>{out[id].base=-rest/groups[0].ids.length;});
     const adj={};
     tob.forEach(t=>{if(!out[t.pid]||!t.by||!out[t.by]||t.by===t.pid)return;adj[t.pid]=(adj[t.pid]||0)-r.tobi;adj[t.by]=(adj[t.by]||0)+r.tobi;});
     const sh={};(g.yaku||[]).forEach(y=>{const p=shugiPay(y,order);for(const k in p)sh[k]=(sh[k]||0)+p[k];});
@@ -459,7 +468,7 @@ function stats(list){
     s.games.forEach(g=>{
       const r=gameResult(s,g);const ids=Object.keys(r);const n=ids.length;
       if(g.summary){ids.forEach(id=>{const x=get(id);x.pt+=r[id].pt;x.played+=gCount(g);seen.add(id);});return;}
-      ids.forEach(id=>{const x=get(id),v=r[id];x.pt+=v.pt;x.games++;x.played++;x.r[v.rank-1]++;x.rankSum+=v.rank;if(v.rank===n)x.last++;if(v.tobi)x.tobi++;x.bust+=v.bust;
+      ids.forEach(id=>{const x=get(id),v=r[id];x.pt+=v.pt;x.games++;x.played++;x.r[v.rank-1]++;x.rankSum+=v.rank;if(v.last!==undefined?v.last:v.rank===n)x.last++;if(v.tobi)x.tobi++;x.bust+=v.bust;
         if(!x.best||v.pt>x.best.pt)x.best={pt:v.pt,raw:v.raw,date:s.date};seen.add(id);});
       (g.yaku||[]).forEach(y=>{if(!r[y.pid])return;const w=get(y.pid);w.yaku++;w.ykList.push(yakuNames(y)+'・'+(y.how==='tsumo'?'ツモ':'ロン'));if(y.how==='ron'&&r[y.from])get(y.from).hoju++;const p=shugiPay(y,ids);for(const k in p)get(k).shugi+=p[k];});
     });
@@ -701,7 +710,7 @@ function renderSession(s){
     const cells=all.map(id=>{
       if(!r[id])return '<td class="out">抜け</td>';const v=r[id];
       if(v.summary)return '<td><span class="ptl"><span class="pt '+sc(v.pt)+'">'+fmtPt(v.pt)+'</span></span><span class="raw">'+gCount(g)+'半荘計</span></td>';
-      const tags=(v.tobi?'<span class="tag tb">トビ</span>':'')+(v.bust?'<span class="tag sh">飛ばし'+(v.bust>1?'×'+v.bust:'')+'</span>':'')+(v.shugi?'<span class="tag sh">祝儀'+fmtPt(v.shugi)+'</span>':'');
+      const tags=(v.tie?'<span class="tag sh">同着</span>':'')+(v.tobi?'<span class="tag tb">トビ</span>':'')+(v.bust?'<span class="tag sh">飛ばし'+(v.bust>1?'×'+v.bust:'')+'</span>':'')+(v.shugi?'<span class="tag sh">祝儀'+fmtPt(v.shugi)+'</span>':'');
       return '<td><span class="ptl"><span class="rk r'+v.rank+'" aria-label="'+v.rank+'位">'+v.rank+'</span><span class="pt '+sc(v.pt)+'">'+fmtPt(v.pt)+'</span></span>'+(v.raw===null?'':'<span class="raw">'+fmtScore(v.raw)+'</span>')+(tags?'<span class="tags">'+tags+'</span>':'')+'</td>';
     }).join('');
     const mark=(g.summary?'<span class="tag sh">まとめ</span>':'')+((g.yaku||[]).length?'<span class="tag sh">役満</span>':'');
@@ -817,7 +826,7 @@ function renderSettings(){
     +'<li><b>素点で入力</b>：2位以下は（素点 − 返し）÷ 1000 を、返し未満は切り上げ・返し以上は切り捨てで整数にし、順位点を足します。1位は2位以下の合計を全部引き受けるので、端数のズレは1位で調整されます。</li>'
     +'<li>素点入力のトビ：素点がマイナスの人（0点ちょうどは除く）がトビで、飛んだ人から飛ばした人へトビの点が移ります。</li>'
     +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。スコアに足されるのは素点入力のときだけで、スコア入力のときは記録として残ります。</li>'
-    +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順（同点はメンバー欄で先に並んでいる人が上）です。</li>'
+    +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順です。素点が同じ人は同着で、順位点を分け合って同じスコアになります（1位同着なら1位の分を等分）。トビは何人同時でも、飛んだ人それぞれから飛ばした人へトビの点が移ります。</li>'
     +'<li>チップはスコアと同じ点数換算で、日ごとの浮き沈みを記録します。成績ではチップ込みとスコアのみの両方を出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
     +'<section><h2>データ</h2><p class="hint">全記録をテキスト（JSON）で書き出せます。バックアップや、Claudeに渡して記録を作ってもらうときに使います。</p><div class="formfoot" style="justify-content:flex-start"><button class="btn sm" data-act="copy-json">記録データをコピー</button><button class="btn sm" data-act="dl-json">ファイルで保存</button></div><div id="json-box"></div>'
     +(w?'<div class="panel"><h3>記録を取り込む</h3><p class="hint">書き出したデータや、Claudeが作った記録データ（JSON）を貼り付けて取り込みます。同じIDの対局日・メンバーは上書きされ、それ以外の記録はそのまま残ります。</p><textarea class="in" id="imp-text" rows="6" placeholder="{&quot;players&quot;:[…],&quot;sessions&quot;:[…]}"></textarea>'
