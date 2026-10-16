@@ -323,13 +323,13 @@ const GROUP_EMAIL='icchoatsumaranke@mahjong.app';   // みんなで使う共用�
 const GROUP_UID='GnzYUokE79Q4vkfhgKvZm5smwUR2';       // そのアカウントのUID
 /* ============================================================ */
 const CONFIGURED=!FIREBASE_CONFIG.apiKey.startsWith('__');
-const DEFAULTS={"3":{start:35000,ret:40000,uma:[35,0,-20],tobi:10,shugi:20},"4":{start:25000,ret:30000,uma:[50,10,-10,-30],tobi:10,shugi:20}};
+const DEFAULTS={"3":{start:35000,ret:40000,uma:[35,0,-20],tobi:10,shugi:20,chip:2},"4":{start:25000,ret:30000,uma:[50,10,-10,-30],tobi:10,shugi:20,chip:2}};
 const YAKU=['国士無双','四暗刻','大三元','字一色','小四喜','大四喜','緑一色','清老頭','九蓮宝燈','四槓子','天和','地和','数え役満','四暗刻単騎','国士無双十三面待ち','純正九蓮宝燈'];
 const clone=o=>JSON.parse(JSON.stringify(o));
 
 function normRule(r,mode){
   const d=DEFAULTS[mode]||DEFAULTS[4];r=r||{};
-  const out={start:r.start||d.start,ret:r.ret||d.ret,uma:Array.isArray(r.uma)?r.uma.slice(0,mode):d.uma.slice(),tobi:typeof r.tobi==='number'?r.tobi:d.tobi,shugi:typeof r.shugi==='number'?r.shugi:d.shugi};
+  const out={start:r.start||d.start,ret:r.ret||d.ret,uma:Array.isArray(r.uma)?r.uma.slice(0,mode):d.uma.slice(),tobi:typeof r.tobi==='number'?r.tobi:d.tobi,shugi:typeof r.shugi==='number'?r.shugi:d.shugi,chip:typeof r.chip==='number'&&r.chip>0?r.chip:d.chip};
   while(out.uma.length<mode)out.uma.push(0);
   return out;
 }
@@ -375,6 +375,7 @@ const fmtPt=v=>sgn(v)+absTxt(v);
 const fmtTot=v=>sgn(v)+absTxt(r1(v));
 const fmtScore=v=>(v<0?'−':'')+Math.abs(v).toLocaleString('ja-JP');
 const fmtChip=v=>sgn(v)+absTxt(v);
+const fmtMai=v=>sgn(v)+absTxt(r1(v))+'枚';
 const pct=v=>(v*100).toFixed(1)+'%';
 const WD='日月火水木金土';
 function fmtDate(s){const a=String(s).split('-').map(Number);if(!a[0])return esc(s);const d=new Date(a[0],a[1]-1,a[2]);return a[0]+'/'+a[1]+'/'+a[2]+'（'+WD[d.getDay()]+'）';}
@@ -386,7 +387,7 @@ function parsePtIn(str){const t=norm(str);if(t==='')return null;if(!/^[+-]?\d+(\
 function parseIntLoose(str){const t=norm(str);if(t==='')return 0;if(!/^[+-]?\d+$/.test(t))return NaN;return parseInt(t,10);}
 function parseNum(str){const t=norm(str);if(!/^[+-]?\d+(\.\d+)?$/.test(t))return NaN;return parseFloat(t);}
 function umaText(u){return u.map(x=>sgn(x)+Math.abs(x)).join(' / ');}
-function ruleText(s){const r=s.rule;return fmtScore(r.start)+'持ち'+fmtScore(r.ret)+'返し・順位点 '+umaText(r.uma)+'・トビ±'+r.tobi+'・役満祝儀 '+r.shugi+'オール';}
+function ruleText(s){const r=s.rule;return fmtScore(r.start)+'持ち'+fmtScore(r.ret)+'返し・順位点 '+umaText(r.uma)+'・トビ±'+r.tobi+'・役満祝儀 '+r.shugi+'オール・チップ1枚'+r.chip+'点';}
 /* 役満: 1回の和了に複合した役を yakus:[{name,mult,pao}] で持つ（古い記録は name/pao から読み替え） */
 const DOUBLE_YAKU=['大四喜','純正九蓮宝燈','純正九蓮','国士無双十三面待ち','国士無双十三面','国士十三面','四暗刻単騎','四暗刻単騎待ち','スッタン'];
 const multOf=n=>DOUBLE_YAKU.includes(String(n||'').trim())?2:1;
@@ -465,16 +466,16 @@ function seatDue(s){const n=totalGames(s);return n>0&&n%4===0&&s.games.length>0&
 function totalGames(s){return s.games.reduce((a,g)=>a+gCount(g),0);}
 function gameNos(s){let n=1;return s.games.map(g=>{const c=gCount(g);const o={start:n,label:c>1?n+'〜'+(n+c-1):String(n)};n+=c;return o;});}
 function dayTotals(s){
-  const t={};const mk=()=>({pt:0,games:0,chip:0});
+  const t={};const mk=()=>({pt:0,games:0,chip:0,chipN:0});
   s.members.forEach(id=>{t[id]=mk();});
   s.games.forEach(g=>{const r=gameResult(s,g);for(const id in r){if(!t[id])t[id]=mk();t[id].pt+=r[id].pt;t[id].games+=gCount(g);}});
-  for(const id in (s.chips||{})){if(!t[id])t[id]=mk();t[id].chip=s.chips[id]||0;}
+  for(const id in (s.chips||{})){if(!t[id])t[id]=mk();t[id].chip=s.chips[id]||0;t[id].chipN=r1(t[id].chip/s.rule.chip);}
   for(const id in t){t[id].pt=r1(t[id].pt);t[id].total=r1(t[id].pt+t[id].chip);}
   return t;
 }
 function filtered(mode,year){return data.sessions.filter(s=>(mode==='all'||String(s.mode)===mode)&&(year==='all'||s.date.slice(0,4)===year));}
 function stats(list){
-  const t={};const mk=()=>({pt:0,games:0,played:0,r:[0,0,0,0],rankSum:0,last:0,tobi:0,bust:0,best:null,chip:0,shugi:0,yaku:0,ykList:[],hoju:0,days:0});
+  const t={};const mk=()=>({pt:0,games:0,played:0,r:[0,0,0,0],rankSum:0,last:0,tobi:0,bust:0,best:null,chip:0,chipN:0,shugi:0,yaku:0,ykList:[],hoju:0,days:0});
   const get=id=>t[id]||(t[id]=mk());
   list.forEach(s=>{
     const seen=new Set();
@@ -485,10 +486,10 @@ function stats(list){
         if(!x.best||v.pt>x.best.pt)x.best={pt:v.pt,raw:v.raw,date:s.date};seen.add(id);});
       (g.yaku||[]).forEach(y=>{if(!r[y.pid])return;const w=get(y.pid);w.yaku++;w.ykList.push(yakuNames(y)+'・'+(y.how==='tsumo'?'ツモ':'ロン'));if(y.how==='ron'&&r[y.from])get(y.from).hoju++;const p=shugiPay(y,ids);for(const k in p)get(k).shugi+=p[k];});
     });
-    for(const id in (s.chips||{})){const c=s.chips[id]||0;if(!c)continue;get(id).chip+=c;seen.add(id);}
+    for(const id in (s.chips||{})){const c=s.chips[id]||0;if(!c)continue;get(id).chip+=c;get(id).chipN+=c/s.rule.chip;seen.add(id);}
     seen.forEach(id=>get(id).days++);
   });
-  for(const id in t){t[id].pt=r1(t[id].pt);t[id].shugi=r1(t[id].shugi);t[id].total=r1(t[id].pt+t[id].chip);}
+  for(const id in t){t[id].pt=r1(t[id].pt);t[id].shugi=r1(t[id].shugi);t[id].chipN=r1(t[id].chipN);t[id].total=r1(t[id].pt+t[id].chip);}
   return t;
 }
 
@@ -567,7 +568,8 @@ function ruleFields(p,mode,rule){
     +'<div class="uma"><div class="field"><span class="lbl">1位の順位点</span><span class="auto filled" id="'+p+'-uma0">'+fmtPt(rule.uma[0])+'</span></div>'
     +rule.uma.slice(1).map((u,j)=>{const i=j+1;return '<div class="field"><label for="'+p+'-uma-'+i+'">'+(i+1)+'位の順位点</label><div class="inrow">'+signBtn(p+'-uma-'+i)+'<input class="in num" id="'+p+'-uma-'+i+'" inputmode="numeric" value="'+u+'"></div></div>';}).join('')+'</div>'
     +'<div class="rgrid"><div class="field"><label for="'+p+'-tobi">トビ（飛んだ人 −、飛ばした人 ＋）</label><input class="in num" id="'+p+'-tobi" inputmode="decimal" value="'+rule.tobi+'"></div>'
-    +'<div class="field"><label for="'+p+'-shugi">役満祝儀（オール）</label><input class="in num" id="'+p+'-shugi" inputmode="decimal" value="'+rule.shugi+'"></div></div></fieldset>';
+    +'<div class="field"><label for="'+p+'-shugi">役満祝儀（オール）</label><input class="in num" id="'+p+'-shugi" inputmode="decimal" value="'+rule.shugi+'"></div>'
+    +'<div class="field"><label for="'+p+'-chip">チップ1枚の点数</label><input class="in num" id="'+p+'-chip" inputmode="decimal" value="'+rule.chip+'"></div></div></fieldset>';
 }
 function readRule(p,mode){
   const start=parseIntLoose($('#'+p+'-start').value),ret=parseIntLoose($('#'+p+'-ret').value);
@@ -577,7 +579,9 @@ function readRule(p,mode){
   uma[0]=r1((ret-start)*mode/1000-uma.slice(1).reduce((a,b)=>a+b,0));
   const tobi=parseNum($('#'+p+'-tobi').value),shugi=parseNum($('#'+p+'-shugi').value);
   if(!isFinite(tobi)||!isFinite(shugi)||tobi<0||shugi<0)return {err:'トビと役満祝儀を0以上の数字で入れてください'};
-  return {rule:{start,ret,uma,tobi,shugi}};
+  const chip=parseNum($('#'+p+'-chip').value);
+  if(!(chip>0))return {err:'チップ1枚の点数を0より大きい数字で入れてください'};
+  return {rule:{start,ret,uma,tobi,shugi,chip}};
 }
 function setMsg(id,text,kind){const el=document.getElementById(id);if(el){el.textContent=text;el.className='msg'+(kind?' '+kind:'');}}
 
@@ -601,7 +605,7 @@ function renderLog(){
     const t=dayTotals(s);
     const ord=Object.keys(t).filter(id=>t[id].games>0||t[id].chip).sort((a,b)=>t[b].total-t[a].total);
     const yk=s.games.reduce((a,g)=>a+(g.yaku||[]).length,0);
-    const res=ord.length?ord.map(id=>'<span class="dr"><span class="nm">'+esc(pName(id))+'</span><span class="pt '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span>'+(t[id].chip?'<span class="ch">うちチップ'+fmtChip(t[id].chip)+'</span>':'')+'</span>').join('')
+    const res=ord.length?ord.map(id=>'<span class="dr"><span class="nm">'+esc(pName(id))+'</span><span class="pt '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span>'+(t[id].chip?'<span class="ch">チップ'+fmtMai(t[id].chipN)+'</span>':'')+'</span>').join('')
       :'<span class="none">'+s.members.map(id=>esc(pName(id))).join('・')+'（半荘はまだありません）</span>';
     return '<li><button class="day" data-act="open" data-sid="'+s.id+'"><span class="dhead"><span class="ddate">'+fmtDate(s.date)+'</span><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span><span class="dcount">半荘'+totalGames(s)+'回</span>'+(seatDue(s)?'<span class="badge seat">席替え</span>':'')+(yk?'<span class="badge yk">役満 '+yk+'</span>':'')+'</span>'
       +(s.memo?'<span class="dmemo">'+esc(s.memo)+'</span>':'')+'<span class="dres">'+res+'</span></button></li>';
@@ -715,7 +719,7 @@ function renderSession(s){
   const due=seatDue(s);
   if(due)h+='<div class="seatbar" role="status"><span class="stick" aria-hidden="true"><i></i></span><div class="seatbar-b"><p class="seatbar-t">席替えです</p><p class="seatbar-s">'+due+'半荘が終わりました。'+(due+1)+'半荘目は席を替えてから</p></div></div>';
   if(ord.length){
-    h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+esc(pName(id))+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtChip(t[id].chip)+'</span></span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
+    h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+esc(pName(id))+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtMai(t[id].chipN)+'（'+fmtChip(t[id].chip)+'）</span></span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
   }
   h+='<section><div class="sechead"><h3>半荘ごとの記録</h3>'+(w&&s.games.length?'<span class="hint">番号をタップで編集・削除</span>':'')+'</div>';
   if(!s.games.length)h+='<p class="hint">まだ半荘がありません。'+(w?'下の「半荘を追加」から1回ずつ入れてください。':'')+'</p>';
@@ -738,7 +742,7 @@ function renderSession(s){
         +all.map(id=>{const v=r1(pay[id]||0);return '<td>'+(v?'<span class="pt '+sc(v)+'">'+fmtPt(v)+'</span>':'')+'</td>';}).join('')+'</tr>';}).join('');
     return '<tr'+(gEditId===g.id?' class="editing"':'')+'><th scope="row" class="no">'+no+(mark?'<span class="tags">'+mark+'</span>':'')+'</th>'+cells+'</tr>'+ykRows;
   }).join('');
-  const foot=(lab,f)=>'<tr'+(lab==='合計'?' class="sum"':'')+'><th scope="row">'+lab+'</th>'+all.map(id=>{const v=f(id);return '<td class="'+sc(v)+'">'+(lab==='チップ'?fmtChip(v):fmtTot(v))+'</td>';}).join('')+'</tr>';
+  const foot=(lab,f)=>'<tr'+(lab==='合計'?' class="sum"':'')+'><th scope="row">'+lab+'</th>'+all.map(id=>{const v=f(id);return '<td class="'+sc(v)+'">'+(lab==='チップ'?fmtChip(v)+(v?'<span class="raw">'+fmtMai(v/s.rule.chip)+'</span>':''):fmtTot(v))+'</td>';}).join('')+'</tr>';
   h+='<div class="table-scroll"><table class="score"><colgroup><col class="c-no">'+all.map(()=>'<col>').join('')+'</colgroup><thead><tr><th scope="col">半荘</th>'+head+'</tr></thead><tbody>'+rows+'</tbody><tfoot>'
     +foot('スコア',id=>t[id].pt)+foot('チップ',id=>(s.chips||{})[id]||0)+foot('合計',id=>t[id].total)+'</tfoot></table></div>';
   if(s.games.length||Object.keys(s.chips||{}).length){
@@ -752,7 +756,7 @@ function renderSession(s){
         :'<p class="hint">レートを押すと、1人ずつの金額が出ます。</p>')
       +'</div>';
   }
-  if(w)h+='<div class="chipform"><span class="lbl">チップ（点数換算）</span><div class="chipgrid">'+all.map(id=>{const v=(s.chips||{})[id]||0;return '<div class="field"><label for="c-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('c-'+id)+'<input class="in num chip-in" id="c-'+id+'" inputmode="numeric" autocomplete="off" value="'+(v||'')+'" placeholder="0"></div></div>';}).join('')+'</div>'
+  if(w)h+='<div class="chipform"><span class="lbl">チップ（枚数・1枚＝'+s.rule.chip+'点）</span><div class="chipgrid">'+all.map(id=>{const v=r1(((s.chips||{})[id]||0)/s.rule.chip);return '<div class="field"><label for="c-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('c-'+id)+'<input class="in num chip-in" id="c-'+id+'" inputmode="numeric" autocomplete="off" value="'+(v||'')+'" placeholder="0"></div></div>';}).join('')+'</div>'
     +'<div class="formfoot"><span class="msg" id="c-msg"></span><button class="btn sm" data-act="save-chips">チップを保存</button></div></div>';
   h+='</section>';
   const yks=[];s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({y,no:nos[i].label})));
@@ -794,11 +798,11 @@ function renderTotals(){
   h+='<section><div class="sechead"><h3>累計スコア</h3><div class="seg" role="group" aria-label="並び順">'+[['total','チップ込み順'],['score','スコア順']].map(x=>'<button class="segb" data-act="tsort" data-v="'+x[0]+'" aria-pressed="'+((x[0]==='score')===(key==='pt'))+'">'+x[1]+'</button>').join('')+'</div></div>'
     +'<p class="period">'+list.length+'日・半荘'+games+'回</p><div class="table-scroll tot-wrap"><table class="tot"><thead><tr><th scope="col">#</th><th scope="col">名前</th><th scope="col" class="r">チップ込み</th><th scope="col" class="r">スコア</th><th scope="col" class="r">チップ</th><th scope="col" class="barcol"><span class="sr">'+(key==='pt'?'スコア':'チップ込み')+'の棒</span></th><th scope="col" class="r">半荘</th><th scope="col" class="r">平均順位</th><th scope="col" class="r">参加</th></tr></thead><tbody>'
     +byPt.map((id,i)=>{const x=t[id];const v=x[key];const wpct=(Math.abs(v)/maxAbs*50).toFixed(1);
-      return '<tr><td class="pos">'+(i+1)+'</td><td class="nmc">'+esc(pName(id))+'</td>'+cell(x.total,key==='total')+cell(x.pt,key==='pt')+cell(x.chip,false)+'<td class="barcol"><span class="bar"><i class="'+sc(v)+'" style="'+(v>=0?'left':'right')+':50%;width:'+wpct+'%"></i></span></td><td class="r">'+x.played+'</td><td class="r">'+(x.games?(x.rankSum/x.games).toFixed(2):'—')+'</td><td class="r">'+x.days+'日</td></tr>';}).join('')
+      return '<tr><td class="pos">'+(i+1)+'</td><td class="nmc">'+esc(pName(id))+'</td>'+cell(x.total,key==='total')+cell(x.pt,key==='pt')+'<td class="r '+sc(x.chipN)+'">'+fmtMai(x.chipN)+'</td>'+'<td class="barcol"><span class="bar"><i class="'+sc(v)+'" style="'+(v>=0?'left':'right')+':50%;width:'+wpct+'%"></i></span></td><td class="r">'+x.played+'</td><td class="r">'+(x.games?(x.rankSum/x.games).toFixed(2):'—')+'</td><td class="r">'+x.days+'日</td></tr>';}).join('')
     +'</tbody></table></div>'
     +'<ol class="totlist">'+byPt.map((id,i)=>{const x=t[id];const v=x[key];const wpct=(Math.abs(v)/maxAbs*50).toFixed(1);
       return '<li><span class="tp'+(i===0?' first':'')+'">'+(i+1)+'</span><span class="tn">'+esc(pName(id))+'</span><span class="tv '+sc(v)+'">'+fmtTot(v)+'</span>'
-        +'<span class="ts">'+(key==='pt'?'チップ込み <b class="'+sc(x.total)+'">'+fmtTot(x.total)+'</b>':'スコア <b class="'+sc(x.pt)+'">'+fmtTot(x.pt)+'</b>')+'・チップ <b class="'+sc(x.chip)+'">'+fmtChip(x.chip)+'</b></span>'
+        +'<span class="ts">'+(key==='pt'?'チップ込み <b class="'+sc(x.total)+'">'+fmtTot(x.total)+'</b>':'スコア <b class="'+sc(x.pt)+'">'+fmtTot(x.pt)+'</b>')+'・チップ <b class="'+sc(x.chipN)+'">'+fmtMai(x.chipN)+'</b></span>'
         +'<span class="ts">'+x.played+'半荘・平均順位 '+(x.games?(x.rankSum/x.games).toFixed(2):'—')+'・'+x.days+'日参加</span>'
         +'<span class="bar"><i class="'+sc(v)+'" style="'+(v>=0?'left':'right')+':50%;width:'+wpct+'%"></i></span></li>';}).join('')+'</ol></section>';
   const yks=[];
@@ -811,7 +815,7 @@ function renderTotals(){
   const note=(...a)=>a.filter(Boolean).join('・');
   const rateRows=(fn,dir,cnt)=>rated.map(id=>({id,v:fn(t[id])})).sort((a,b)=>dir*(a.v-b.v)||t[b.id].games-t[a.id].games).map(r=>({id:r.id,v:r.v,label:pct(r.v),sub:cnt(t[r.id])+' / '+t[r.id].games+'半荘'}));
   const cards=[];
-  cards.push(rankCard('チップ','点数換算',ids.map(id=>({id,v:t[id].chip})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:fmtChip(r.v),cls:sc(r.v),sub:t[r.id].days+'日参加'}))));
+  cards.push(rankCard('チップ','枚数',ids.map(id=>({id,v:t[id].chipN})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:fmtMai(r.v),cls:sc(r.v),sub:'スコア換算 '+fmtChip(t[r.id].chip)+'・'+t[r.id].days+'日参加'}))));
   cards.push(rankCard('平均順位',note('小さい順',minNote),rated.map(id=>({id,v:t[id].rankSum/t[id].games})).sort((a,b)=>a.v-b.v||t[b.id].games-t[a.id].games).map(r=>({id:r.id,v:r.v,label:r.v.toFixed(2),sub:t[r.id].r.map((c,i)=>(i+1)+'位'+c).slice(0,ui.tMode==='3'?3:4).join(' ')}))));
   cards.push(rankCard('トップ率',minNote,rateRows(x=>x.r[0]/x.games,-1,x=>'トップ'+x.r[0])));
   cards.push(rankCard('連対率',minNote,rateRows(x=>(x.r[0]+x.r[1])/x.games,-1,x=>'1・2位'+(x.r[0]+x.r[1]))));
@@ -848,7 +852,7 @@ function renderSettings(){
     +'<li>素点入力のトビ：素点がマイナスの人（0点ちょうどは除く）がトビで、飛んだ人から飛ばした人へトビの点が移ります。</li>'
     +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。祝儀は半荘のスコアとは別の行で表示して、合計に足します。</li>'
     +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順です。素点が同じ人は同着で、順位点を分け合って同じスコアになります（1位同着なら1位の分を等分）。トビは何人同時でも、飛んだ人それぞれから飛ばした人へトビの点が移ります。</li>'
-    +'<li>チップはスコアと同じ点数換算で、日ごとの浮き沈みを記録します。成績ではチップ込みとスコアのみの両方を出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
+    +'<li>チップは枚数で入れると、1枚＝2点（ルールで変更できます）でスコアに換算して足します。成績ではチップ込みとスコアのみの両方を出し、チップのランキングは枚数で出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
     +'<section><h2>データ</h2><p class="hint">全記録をテキスト（JSON）で書き出せます。バックアップや、Claudeに渡して記録を作ってもらうときに使います。</p><div class="formfoot" style="justify-content:flex-start"><button class="btn sm" data-act="copy-json">記録データをコピー</button><button class="btn sm" data-act="dl-json">ファイルで保存</button></div><div id="json-box"></div>'
     +(w?'<div class="panel"><h3>記録を取り込む</h3><p class="hint">書き出したデータや、Claudeが作った記録データ（JSON）を貼り付けて取り込みます。同じIDの対局日・メンバーは上書きされ、それ以外の記録はそのまま残ります。</p><textarea class="in" id="imp-text" rows="6" placeholder="{&quot;players&quot;:[…],&quot;sessions&quot;:[…]}"></textarea>'
       +(importDraft?'<p class="msg ok">'+esc(importDraft.summary)+'</p>':'')
@@ -961,8 +965,8 @@ function updateChipSum(){
   const s=cur();if(!s||!document.getElementById('c-msg'))return;
   let sum=0,bad=false;
   Object.keys(dayTotals(s)).forEach(id=>{const el=document.getElementById('c-'+id);if(!el)return;const v=parseIntLoose(el.value);if(Number.isNaN(v))bad=true;else sum+=v;});
-  if(bad)return setMsg('c-msg','チップは整数で入れてください','err');
-  setMsg('c-msg',sum===0?'チップ合計 ±0':'チップ合計が '+fmtChip(sum)+' になっています',sum===0?'':'err');
+  if(bad)return setMsg('c-msg','チップは枚数を整数で入れてください','err');
+  setMsg('c-msg',sum===0?'チップ合計 ±0枚':'チップ合計が '+fmtMai(sum)+' になっています',sum===0?'':'err');
 }
 
 /* ---------- actions ---------- */
@@ -1094,8 +1098,8 @@ const act={
   },
   'save-chips'(){
     const s=cur();const chips={};let bad=false;
-    Object.keys(dayTotals(s)).forEach(id=>{const el=document.getElementById('c-'+id);if(!el)return;const v=parseIntLoose(el.value);if(Number.isNaN(v))bad=true;else if(v)chips[id]=v;});
-    if(bad)return setMsg('c-msg','チップは整数で入れてください','err');
+    Object.keys(dayTotals(s)).forEach(id=>{const el=document.getElementById('c-'+id);if(!el)return;const v=parseIntLoose(el.value);if(Number.isNaN(v))bad=true;else if(v)chips[id]=r1(v*s.rule.chip);});
+    if(bad)return setMsg('c-msg','チップは枚数を整数で入れてください','err');
     const op={t:'chips',sid:s.id,chips};
     save(d=>applyOp(d,op),{done:'チップを保存しました'});
   },
