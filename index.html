@@ -203,6 +203,9 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 .seatbar-t{font-family:var(--display);font-size:1.35rem;letter-spacing:.06em;line-height:1.2}
 .seatbar-s{font-size:.86rem;opacity:.9}
 .badge.seat{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.score tr.ykrow th,.score tr.ykrow td{background:color-mix(in srgb,var(--dot) 7%,transparent);padding-top:4px;padding-bottom:4px}
+.score tr.ykrow .tag.yk{border:1px solid var(--dot);color:var(--dot);font-size:.66rem;font-weight:700;border-radius:4px;padding:0 4px}
+.score tr.ykrow .ykn{display:block;font-family:var(--body);font-size:.62rem;line-height:1.25;color:var(--muted);word-break:break-all;margin-top:2px}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -431,7 +434,8 @@ function gameResult(s,g){
   const r=s.rule,ids=gameIds(s,g),out={},tob=g.tobis||[];
   if(g.pts){
     const order=Array.isArray(g.order)?ids:ids.slice().sort((a,b)=>(g.pts[b]-g.pts[a])||(ids.indexOf(a)-ids.indexOf(b)));
-    order.forEach((id,i)=>{out[id]={rank:i+1,pt:g.pts[id],raw:null,shugi:0,last:i===order.length-1};});
+    const sh={};(g.yaku||[]).forEach(y=>{const p=shugiPay(y,order);for(const k in p)sh[k]=(sh[k]||0)+p[k];});
+    order.forEach((id,i)=>{const v=sh[id]||0,inc=!g.shugiSep;out[id]={rank:i+1,raw:null,shugi:r1(v),base:r1(inc?g.pts[id]-v:g.pts[id]),pt:r1(inc?g.pts[id]:g.pts[id]+v),last:i===order.length-1};});
   }else{
     const order=ids.slice().sort((a,b)=>(g.scores[b]-g.scores[a])||(ids.indexOf(a)-ids.indexOf(b)));
     /* 同じ素点の人は同着：順位点を平均して分け合い、同じスコアになる。1位グループは残り全員の合計を等分 */
@@ -635,7 +639,7 @@ function gameForm(s){
   const no=editing?gameNos(s)[s.games.indexOf(editing)].label:String(totalGames(s)+1);
   let hint,body;
   if(gKind==='pt'){
-    hint='順位ごとに人とスコアを選んでください。1位のスコアは2位以下から自動で入ります。トビや役満祝儀を含めた最終スコアを入れて、トビと役満は下で記録だけします。';
+    hint='順位ごとに人とスコアを選んでください。1位のスコアは2位以下から自動で入ります。トビ込みのスコアを入れてください。役満祝儀は含めずに、下で役満を記録すると祝儀の行が自動で足されます。';
     body='<div class="rkform">'+Array.from({length:n},(_,i)=>'<div class="rkrow"><span class="rkl r'+(i+1)+'">'+(i+1)+'位</span><select class="in g-sel" id="gs-'+i+'" aria-label="'+(i+1)+'位の人">'+memberOpts(s,s.members[i])+'</select>'
       +(i===0?'<output class="auto" id="gv-0" aria-live="polite">自動</output>':'<div class="inrow">'+signBtn('gv-'+i)+'<input class="in num g-in" id="gv-'+i+'" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="'+(i+1)+'位のスコア"></div>')+'</div>').join('')+'</div>';
   }else if(gKind==='sum'){
@@ -694,7 +698,8 @@ function newYkPart(){return {name:'',mult:1,pao:false,auto:true};}
 function fillGameForm(g){
   if(g.summary){for(const id in g.pts){const el=document.getElementById('g-'+id);if(el)el.value=String(g.pts[id]);}const c=document.getElementById('g-cnt');if(c)c.value=String(g.count||'');return;}
   if(g.pts&&Array.isArray(g.order)){
-    g.order.forEach((id,i)=>{const sel=document.getElementById('gs-'+i);if(sel)sel.value=id;if(i>0){const el=document.getElementById('gv-'+i);if(el)el.value=String(g.pts[id]);}});
+    const rr=gameResult(cur(),g);
+    g.order.forEach((id,i)=>{const sel=document.getElementById('gs-'+i);if(sel)sel.value=id;if(i>0){const el=document.getElementById('gv-'+i);if(el)el.value=String(rr[id]?rr[id].base:g.pts[id]);}});
   }else if(g.scores){
     for(const id in g.scores){const el=document.getElementById('g-'+id);if(el)el.value=String(g.scores[id]);}
   }
@@ -721,12 +726,17 @@ function renderSession(s){
     const cells=all.map(id=>{
       if(!r[id])return '<td class="out">抜け</td>';const v=r[id];
       if(v.summary)return '<td><span class="ptl"><span class="pt '+sc(v.pt)+'">'+fmtPt(v.pt)+'</span></span><span class="raw">'+gCount(g)+'半荘計</span></td>';
-      const tags=(v.tie?'<span class="tag sh">同着</span>':'')+(v.tobi?'<span class="tag tb">トビ</span>':'')+(v.bust?'<span class="tag sh">飛ばし'+(v.bust>1?'×'+v.bust:'')+'</span>':'')+(v.shugi?'<span class="tag sh">祝儀'+fmtPt(v.shugi)+'</span>':'');
-      return '<td><span class="ptl"><span class="rk r'+v.rank+'" aria-label="'+v.rank+'位">'+v.rank+'</span><span class="pt '+sc(v.pt)+'">'+fmtPt(v.pt)+'</span></span>'+(v.raw===null?'':'<span class="raw">'+fmtScore(v.raw)+'</span>')+(tags?'<span class="tags">'+tags+'</span>':'')+'</td>';
+      const tags=(v.tie?'<span class="tag sh">同着</span>':'')+(v.tobi?'<span class="tag tb">トビ</span>':'')+(v.bust?'<span class="tag sh">飛ばし'+(v.bust>1?'×'+v.bust:'')+'</span>':'');
+      const sp=r1(v.pt-(v.shugi||0));
+      return '<td><span class="ptl"><span class="rk r'+v.rank+'" aria-label="'+v.rank+'位">'+v.rank+'</span><span class="pt '+sc(sp)+'">'+fmtPt(sp)+'</span></span>'+(v.raw===null?'':'<span class="raw">'+fmtScore(v.raw)+'</span>')+(tags?'<span class="tags">'+tags+'</span>':'')+'</td>';
     }).join('');
     const mark=(g.summary?'<span class="tag sh">まとめ</span>':'')+((g.yaku||[]).length?'<span class="tag sh">役満</span>':'');
     const no=w?'<button type="button" class="nob" data-act="edit-game" data-gid="'+g.id+'" aria-label="半荘'+nos[i].label+'を編集">'+nos[i].label+'</button>':nos[i].label;
-    return '<tr'+(gEditId===g.id?' class="editing"':'')+'><th scope="row" class="no">'+no+(mark?'<span class="tags">'+mark+'</span>':'')+'</th>'+cells+'</tr>';
+    const ids=Object.keys(r);
+    const ykRows=g.summary?'':(g.yaku||[]).map(y=>{const pay=shugiPay(y,ids);if(!Object.keys(pay).length)return '';
+      return '<tr class="ykrow'+(gEditId===g.id?' editing':'')+'"><th scope="row" class="no"><span class="tag yk">祝儀</span><span class="ykn">'+esc(yakuNames(y))+'</span></th>'
+        +all.map(id=>{const v=r1(pay[id]||0);return '<td>'+(v?'<span class="pt '+sc(v)+'">'+fmtPt(v)+'</span>':'')+'</td>';}).join('')+'</tr>';}).join('');
+    return '<tr'+(gEditId===g.id?' class="editing"':'')+'><th scope="row" class="no">'+no+(mark?'<span class="tags">'+mark+'</span>':'')+'</th>'+cells+'</tr>'+ykRows;
   }).join('');
   const foot=(lab,f)=>'<tr'+(lab==='合計'?' class="sum"':'')+'><th scope="row">'+lab+'</th>'+all.map(id=>{const v=f(id);return '<td class="'+sc(v)+'">'+(lab==='チップ'?fmtChip(v):fmtTot(v))+'</td>';}).join('')+'</tr>';
   h+='<div class="table-scroll"><table class="score"><colgroup><col class="c-no">'+all.map(()=>'<col>').join('')+'</colgroup><thead><tr><th scope="col">半荘</th>'+head+'</tr></thead><tbody>'+rows+'</tbody><tfoot>'
@@ -833,10 +843,10 @@ function renderSettings(){
     h+='<ul class="rules">'+[[4,'四麻'],[3,'三麻']].map(m=>'<li>'+m[1]+'：'+esc(ruleText({rule:data.defaults[m[0]]}))+'</li>').join('')+'</ul>';
   }
   h+='</section><section><h2>計算のしかた</h2><ul class="help">'
-    +'<li><b>スコアで入力</b>：2位以下の人とスコアを入れると、1位のスコアは合計が0になるように自動で入ります。トビや役満祝儀を含めた最終スコアを入れ、トビと役満は記録として残すだけです。</li>'
+    +'<li><b>スコアで入力</b>：2位以下の人とスコアを入れると、1位のスコアは合計が0になるように自動で入ります。トビ込みのスコアを入れ、トビは記録として残します。役満祝儀はスコアに含めず、役満を記録すると祝儀の行として別に足されます。</li>'
     +'<li><b>素点で入力</b>：2位以下は（素点 − 返し）÷ 1000 を、返し未満は切り上げ・返し以上は切り捨てで整数にし、順位点を足します。1位は2位以下の合計を全部引き受けるので、端数のズレは1位で調整されます。</li>'
     +'<li>素点入力のトビ：素点がマイナスの人（0点ちょうどは除く）がトビで、飛んだ人から飛ばした人へトビの点が移ります。</li>'
-    +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。スコアに足されるのは素点入力のときだけで、スコア入力のときは記録として残ります。</li>'
+    +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。祝儀は半荘のスコアとは別の行で表示して、合計に足します。</li>'
     +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順です。素点が同じ人は同着で、順位点を分け合って同じスコアになります（1位同着なら1位の分を等分）。トビは何人同時でも、飛んだ人それぞれから飛ばした人へトビの点が移ります。</li>'
     +'<li>チップはスコアと同じ点数換算で、日ごとの浮き沈みを記録します。成績ではチップ込みとスコアのみの両方を出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
     +'<section><h2>データ</h2><p class="hint">全記録をテキスト（JSON）で書き出せます。バックアップや、Claudeに渡して記録を作ってもらうときに使います。</p><div class="formfoot" style="justify-content:flex-start"><button class="btn sm" data-act="copy-json">記録データをコピー</button><button class="btn sm" data-act="dl-json">ファイルで保存</button></div><div id="json-box"></div>'
@@ -1036,7 +1046,7 @@ const act={
       if(g.bad)return setMsg('g-msg','数字以外が入っています','err');
       if(g.missing)return setMsg('g-msg','2位〜'+s.mode+'位のスコアを入れてください','err');
       ids=g.order;const pts={};ids.forEach((id,i)=>{pts[id]=i===0?g.top:g.vals[id];});
-      game.order=ids;game.pts=pts;
+      game.order=ids;game.pts=pts;game.shugiSep=true;
     }else if(gKind==='sum'){
       const cnt=parseIntLoose(($('#g-cnt')||{}).value);
       if(!(cnt>=1))return setMsg('g-msg','何半荘分の合計かを入れてください','err');
