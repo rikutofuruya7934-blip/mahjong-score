@@ -197,6 +197,12 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 .settle-list .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .settle-list .pts{grid-column:1;grid-row:2;font-family:var(--num);font-size:.78rem;color:var(--muted)}
 .settle-list .yen{grid-column:2;grid-row:1/3;align-self:center;font-family:var(--num);font-variant-numeric:tabular-nums;font-weight:600;font-size:1.2rem}
+.seatbar{position:sticky;top:max(8px,env(safe-area-inset-top,0px));z-index:5;display:flex;align-items:center;gap:14px;background:var(--accent);color:var(--accent-ink);border-radius:12px;padding:12px 16px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.seatbar .stick{border-color:transparent;flex:none}
+.seatbar-b{display:flex;flex-direction:column;gap:2px;min-width:0}
+.seatbar-t{font-family:var(--display);font-size:1.35rem;letter-spacing:.06em;line-height:1.2}
+.seatbar-s{font-size:.86rem;opacity:.9}
+.badge.seat{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -449,6 +455,9 @@ function gameResult(s,g){
   return out;
 }
 const gCount=g=>g.summary?(g.count||1):1;
+function ymd(x){return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');}
+function isRecent(s){const d=new Date();return s.date===ymd(d)||s.date===ymd(new Date(d.getTime()-86400000));}
+function seatDue(s){const n=totalGames(s);return n>0&&n%4===0&&s.games.length>0&&!s.games[s.games.length-1].summary&&isRecent(s)?n:0;}
 function totalGames(s){return s.games.reduce((a,g)=>a+gCount(g),0);}
 function gameNos(s){let n=1;return s.games.map(g=>{const c=gCount(g);const o={start:n,label:c>1?n+'〜'+(n+c-1):String(n)};n+=c;return o;});}
 function dayTotals(s){
@@ -590,7 +599,7 @@ function renderLog(){
     const yk=s.games.reduce((a,g)=>a+(g.yaku||[]).length,0);
     const res=ord.length?ord.map(id=>'<span class="dr"><span class="nm">'+esc(pName(id))+'</span><span class="pt '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span>'+(t[id].chip?'<span class="ch">うちチップ'+fmtChip(t[id].chip)+'</span>':'')+'</span>').join('')
       :'<span class="none">'+s.members.map(id=>esc(pName(id))).join('・')+'（半荘はまだありません）</span>';
-    return '<li><button class="day" data-act="open" data-sid="'+s.id+'"><span class="dhead"><span class="ddate">'+fmtDate(s.date)+'</span><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span><span class="dcount">半荘'+totalGames(s)+'回</span>'+(yk?'<span class="badge yk">役満 '+yk+'</span>':'')+'</span>'
+    return '<li><button class="day" data-act="open" data-sid="'+s.id+'"><span class="dhead"><span class="ddate">'+fmtDate(s.date)+'</span><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span><span class="dcount">半荘'+totalGames(s)+'回</span>'+(seatDue(s)?'<span class="badge seat">席替え</span>':'')+(yk?'<span class="badge yk">役満 '+yk+'</span>':'')+'</span>'
       +(s.memo?'<span class="dmemo">'+esc(s.memo)+'</span>':'')+'<span class="dres">'+res+'</span></button></li>';
   }).join('')+'</ul>';
   return h;
@@ -698,6 +707,8 @@ function renderSession(s){
     +'<div class="dayhead"><div class="dh-main"><h2>'+fmtDate(s.date)+'</h2><p class="meta"><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span> '+esc(ruleText(s))+'</p>'+(s.memo?'<p class="memo">'+esc(s.memo)+'</p>':'')+'</div>'
     +(w&&!editOpen?'<button class="btn sm" data-act="edit-open">日付・ルール・メンバーを編集</button>':'')+'</div>';
   if(w&&editOpen)h+=editPanel(s);
+  const due=seatDue(s);
+  if(due)h+='<div class="seatbar" role="status"><span class="stick" aria-hidden="true"><i></i></span><div class="seatbar-b"><p class="seatbar-t">席替えです</p><p class="seatbar-s">'+due+'半荘が終わりました。'+(due+1)+'半荘目は席を替えてから</p></div></div>';
   if(ord.length){
     h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+esc(pName(id))+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtChip(t[id].chip)+'</span></span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
   }
@@ -1193,7 +1204,10 @@ document.addEventListener('keydown',e=>{
 
 /* ---------- start ---------- */
 let db=null,auth=null;
-function refresh(){if(loadedParts.size>=4){loaded=true;data=compose();render({keep:true});}}
+function refresh(){if(loadedParts.size>=4){const prev=loaded?data:null;loaded=true;data=compose();if(prev)checkSeat(prev,data);render({keep:true});}}
+function checkSeat(prev,next){
+  next.sessions.forEach(s=>{const o=prev.sessions.find(x=>x.id===s.id);const due=seatDue(s);if(due&&(!o||totalGames(o)<due))showSeat(due);});
+}
 function listenErr(e){loadError=(e&&e.code==='permission-denied')?'データベースの読み取りが許可されていません。Firestoreのルールを確認してください。':'接続できませんでした（'+(e&&e.code||'error')+'）。電波の良いところで開き直してください。';render();}
 if(CONFIGURED){
   const fb=initializeApp(FIREBASE_CONFIG);
@@ -1207,6 +1221,7 @@ if(CONFIGURED){
 }
 render();
 function showSeat(n){
+  document.querySelectorAll('.seat-ov').forEach(e=>e.remove());
   const ov=document.createElement('div');ov.className='seat-ov';ov.setAttribute('role','dialog');ov.setAttribute('aria-modal','true');ov.setAttribute('aria-labelledby','seat-t');
   ov.innerHTML='<div class="seat-card"><span class="stick big" aria-hidden="true"><i></i></span><p class="seat-t" id="seat-t">席替えです</p><p class="hint">'+n+'半荘が終わりました</p><button type="button" class="btn primary" id="seat-ok">OK</button></div>';
   document.body.appendChild(ov);
