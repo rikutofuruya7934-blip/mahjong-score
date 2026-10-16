@@ -213,6 +213,10 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 .chipform .inrow{align-items:center}
 .chipform .unit{flex:none;font-weight:700;color:var(--accent);padding:0 2px 0 4px}
 .chipform .cv{font-family:var(--num);font-size:.76rem;color:var(--muted);min-height:1.1em}
+.once{font-size:.84rem;background:color-mix(in srgb,var(--gold) 12%,transparent);border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);border-radius:8px;padding:6px 10px}
+.once b{color:var(--gold)}
+.dupwarn{display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--minus) 10%,transparent);border:1px solid var(--minus);border-radius:10px;padding:10px 12px;font-size:.88rem}
+.dupwarn .formfoot{justify-content:flex-start}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -360,6 +364,7 @@ const ui=Object.assign({tab:'log',sid:null,tMode:null,tYear:'all',tMin:0,tSort:'
 const RATES=[['10','テンイチ'],['20','テンニ'],['30','テンサン'],['50','テンゴ'],['100','テンピン']];
 let rate=(()=>{try{const v=localStorage.getItem('mj-rate');return RATES.some(r=>r[0]===v)?v:null;}catch(e){return null;}})();
 let newOpen=false,editOpen=false,confirmKey=null,mismatchArmed=false,nsMode=4;
+let gSeen=null,dupArmed=false;
 let gKind=store.get('mj-gkind')==='raw'?'raw':'pt',gEditId=null,gYaku=[],gTobi=[],ykOpen=false,ykHow='tsumo',ykParts=[],ykPid=null,ykFrom=null,ykPaoWho=null,ykAmt=null;
 let canWrite=false,busy=false,loginOpen=false,authUser=null,importDraft=null;
 const app=document.getElementById('app');
@@ -661,13 +666,29 @@ function gameForm(s){
     hint='終局の点数（素点）を入れると、順位点・トビ・役満祝儀を含めたスコアを計算します。百点単位でもOK（323 → 32,300）。'+(fill?'最後の1人は空欄なら自動で計算します。':'抜け番の人は空欄のままにします。');
     body='<div class="gform">'+s.members.map(id=>'<div class="field gfield"><label for="g-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('g-'+id)+'<input class="in num g-in" id="g-'+id+'" inputmode="numeric" autocomplete="off" placeholder="'+s.rule.start+'"></div></div>').join('')+'</div><p class="preview" id="g-prev"></p>';
   }
-  return '<section class="panel" id="addgame"><div class="sechead"><h3>'+(editing?'半荘'+no+'を編集':'半荘'+no+'を追加')+'</h3>'
+  return '<section class="panel" id="addgame"><div class="sechead"><h3>'+(editing?'半荘'+no+'を編集':'半荘'+no+'の記録')+'</h3>'
     +'<div class="seg" role="group" aria-label="入力方法">'+[['pt','スコア入力'],['raw','素点入力'],['sum','まとめ入力']].map(x=>'<button type="button" class="segb" data-act="g-kind" data-v="'+x[0]+'" aria-pressed="'+(gKind===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>'
+    +(editing?'':'<p class="once">記録の確定は、<b>誰か1人が1回だけ</b>押してください。</p>')
+    +dupNotice(s)
     +'<p class="hint">'+hint+'</p>'+body
     +(gKind==='sum'?'':'<div class="ykbox" id="tb-area">'+tobiArea(s)+'</div><div class="ykbox" id="yk-area">'+yakuArea(s)+'</div>')
     +'<div class="formfoot"><span class="msg" id="g-msg"></span>'+(editing?(confirmKey==='g:'+editing.id?'<button class="btn danger" data-act="del-game" data-gid="'+editing.id+'">本当に削除する</button>':'<button class="btn danger-o" data-act="del-game" data-gid="'+editing.id+'">この半荘を削除</button>')+'<button class="btn ghost" data-act="g-cancel">やめる</button>':'')+'<button class="btn primary" data-act="add-game" id="g-submit">'+submitLabel()+'</button></div></section>';
 }
-function submitLabel(){return gEditId?'変更を保存':'半荘を追加';}
+function gameBrief(s,g){const r=gameResult(s,g);const top=Object.keys(r).sort((a,b)=>(r[a].rank||9)-(r[b].rank||9))[0];return top?'1位 '+pName(top)+' '+fmtPt(r1(r[top].pt-(r[top].shugi||0))):'';}
+function newSinceStart(s){return gSeen&&!gEditId?s.games.filter(g=>!gSeen.has(g.id)):[];}
+function dupNotice(s){
+  const nw=newSinceStart(s);if(!nw.length)return '';
+  const nos=gameNos(s);
+  const list=nw.map(g=>'半荘'+nos[s.games.indexOf(g)].label+'（'+esc(gameBrief(s,g))+'）').join('、');
+  return '<div class="dupwarn" role="alert"><p>入力中に、別の人が'+list+'を記録しました。同じ半荘なら、この入力は要りません。</p><div class="formfoot"><button type="button" class="btn sm" data-act="g-clear">入力を消す</button></div></div>';
+}
+function sameGame(a,b){
+  const pick=g=>g.summary?{k:'sum',c:g.count,v:g.pts}:g.pts?{k:'pt',v:g.pts}:{k:'raw',v:g.scores};
+  const x=pick(a),y=pick(b);if(x.k!==y.k||x.c!==y.c)return false;
+  const ka=Object.keys(x.v||{}).sort(),kb=Object.keys(y.v||{}).sort();
+  return ka.length===kb.length&&ka.every((k,i)=>k===kb[i]&&Number(x.v[k])===Number(y.v[k]));
+}
+function submitLabel(){return gEditId?'変更を保存':'半荘記録を確定';}
 function tobiArea(s){
   let h='<span class="lbl">トビ</span>';
   if(gKind==='raw'&&!gTobi.length)return h+'<p class="hint">素点がマイナスの人がいると、ここで飛ばした人を選べます（0点ちょうどはトビになりません）。</p>';
@@ -729,7 +750,7 @@ function renderSession(s){
     h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+esc(pName(id))+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtMai(t[id].chipN)+'（'+fmtChip(t[id].chip)+'）</span></span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
   }
   h+='<section><div class="sechead"><h3>半荘ごとの記録</h3>'+(w&&s.games.length?'<span class="hint">番号をタップで編集・削除</span>':'')+'</div>';
-  if(!s.games.length)h+='<p class="hint">まだ半荘がありません。'+(w?'下の「半荘を追加」から1回ずつ入れてください。':'')+'</p>';
+  if(!s.games.length)h+='<p class="hint">まだ半荘がありません。'+(w?'下の入力欄から1半荘ずつ記録してください。':'')+'</p>';
   const head=all.map(id=>'<th scope="col">'+esc(pName(id))+'</th>').join('');
   const nos=gameNos(s);
   const rows=s.games.map((g,i)=>{
@@ -939,7 +960,7 @@ function syncRawTobi(vals){
 }
 function updateGameSum(){
   const s=cur();if(!s||!document.getElementById('g-msg'))return;
-  mismatchArmed=false;const btn=$('#g-submit');if(btn)btn.textContent=submitLabel();
+  mismatchArmed=false;dupArmed=false;const btn=$('#g-submit');if(btn)btn.textContent=submitLabel();
   if(gKind==='sum'){
     const g=readSum(s);
     s.members.forEach(id=>{const el=document.getElementById('g-'+id);if(el)el.placeholder=id===g.auto?'自動: '+g.vals[id]:'0';});
@@ -978,7 +999,7 @@ function updateChipSum(){
 }
 
 /* ---------- actions ---------- */
-function resetGameForm(){gEditId=null;gYaku=[];gTobi=[];ykOpen=false;ykHow='tsumo';ykParts=[];ykPid=ykFrom=ykPaoWho=ykAmt=null;}
+function resetGameForm(){gSeen=null;dupArmed=false;gEditId=null;gYaku=[];gTobi=[];ykOpen=false;ykHow='tsumo';ykParts=[];ykPid=ykFrom=ykPaoWho=ykAmt=null;}
 function nav(patch){Object.assign(ui,patch);newOpen=false;editOpen=false;confirmKey=null;resetGameForm();persistUi();render();window.scrollTo(0,0);}
 const act={
   tab(b){nav({tab:b.dataset.tab,sid:null});},
@@ -1028,6 +1049,7 @@ const act={
     render();const f=$('#addgame');if(f)f.scrollIntoView({block:'start',behavior:'smooth'});
   },
   'g-cancel'(){resetGameForm();render();},
+  'g-clear'(){resetGameForm();render();toast('入力を消しました');},
   'yk-open'(){ykOpen=true;ykHow='tsumo';ykParts=[newYkPart()];ykPid=ykFrom=ykPaoWho=ykAmt=null;refreshYaku();const el=$('#yk-name-0');if(el)el.focus();},
   'yk-padd'(){syncYk();ykParts.push(newYkPart());refreshYaku();const el=$('#yk-name-'+(ykParts.length-1));if(el)el.focus();},
   'yk-prm'(b){syncYk();ykParts.splice(Number(b.dataset.i),1);refreshYaku();},
@@ -1093,11 +1115,20 @@ const act={
     if(gTobi.length)game.tobis=clone(gTobi);
     if(gYaku.length)game.yaku=clone(gYaku);
     const editing=gEditId;
+    if(!editing&&!dupArmed){
+      const nos=gameNos(s);
+      const nw=newSinceStart(s),same=s.games.find(g=>sameGame(g,game));
+      if(nw.length||same){
+        dupArmed=true;$('#g-submit').textContent='承知の上で記録する';
+        const why=same?'同じスコアの半荘'+nos[s.games.indexOf(same)].label+'がもう記録されています。':'入力中に別の人が半荘'+nw.map(g=>nos[s.games.indexOf(g)].label).join('・')+'を記録しました。';
+        return setMsg('g-msg',why+'二重登録でなければ、もう一度押すと記録します','err');
+      }
+    }
     const tg=totalGames(s);const idx=editing?s.games.findIndex(x=>x.id===editing):-1;
     const label=idx>=0?gameNos(s)[idx].label:(game.summary&&game.count>1?(tg+1)+'〜'+(tg+game.count):String(tg+1));
     const seatN=!editing&&!game.summary&&(tg+1)%4===0?tg+1:0;
     const op={t:'game',sid:s.id,game};
-    if(save(d=>applyOp(d,op),{done:'半荘'+label+(editing?'を更新しました':'を追加しました'),before:resetGameForm})&&seatN)showSeat(seatN);
+    if(save(d=>applyOp(d,op),{done:'半荘'+label+(editing?'を更新しました':'の記録を確定しました'),before:resetGameForm})&&seatN)showSeat(seatN);
   },
   'del-game'(b){
     const key='g:'+b.dataset.gid;if(confirmKey!==key){confirmKey=key;render();return;}
@@ -1184,6 +1215,7 @@ const act={
     try{navigator.clipboard.writeText(txt).then(()=>toast('記録データをコピーしました'),fallback);}catch(e){fallback();}
   }
 };
+function markStart(t){if(gSeen||gEditId||!t||!t.closest||!t.closest('#addgame'))return;const s=cur();if(s)gSeen=new Set(s.games.map(g=>g.id));}
 function refreshUma0(p){
   const el=document.getElementById(p+'-uma0');if(!el)return;
   const mode=document.getElementById(p+'-uma-3')?4:3;
@@ -1201,6 +1233,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',e=>{
   const t=e.target;
+  markStart(t);
   if(t.classList.contains('g-in'))updateGameSum();
   else if(t.classList.contains('chip-in'))updateChipSum();
   else if(t.classList.contains('yk-name')){const c=ykParts[Number(t.dataset.i)];if(c){c.name=t.value.trim();if(c.auto){c.mult=multOf(c.name);const s=document.getElementById('yk-mult-'+t.dataset.i);if(s)s.value=String(c.mult);ykSumText();}}}
@@ -1208,6 +1241,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target;
+  markStart(t);
   if(t.id==='t-year'){ui.tYear=t.value;persistUi();render();}
   else if(t.id==='t-min'){ui.tMin=Number(t.value)||0;persistUi();render();}
   else if(t.classList.contains('g-sel'))updateGameSum();
