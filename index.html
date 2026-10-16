@@ -206,6 +206,13 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 .score tr.ykrow th,.score tr.ykrow td{background:color-mix(in srgb,var(--dot) 7%,transparent);padding-top:4px;padding-bottom:4px}
 .score tr.ykrow .tag.yk{border:1px solid var(--dot);color:var(--dot);font-size:.66rem;font-weight:700;border-radius:4px;padding:0 4px}
 .score tr.ykrow .ykn{display:block;font-family:var(--body);font-size:.62rem;line-height:1.25;color:var(--muted);word-break:break-all;margin-top:2px}
+.chiphead{display:flex;flex-direction:column;gap:2px}
+.chip-t{font-weight:700;font-size:.95rem}
+.chip-t b{color:var(--accent);font-size:1.05rem}
+.chip-s{font-size:.8rem;color:var(--muted)}
+.chipform .inrow{align-items:center}
+.chipform .unit{flex:none;font-weight:700;color:var(--accent);padding:0 2px 0 4px}
+.chipform .cv{font-family:var(--num);font-size:.76rem;color:var(--muted);min-height:1.1em}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -756,7 +763,7 @@ function renderSession(s){
         :'<p class="hint">レートを押すと、1人ずつの金額が出ます。</p>')
       +'</div>';
   }
-  if(w)h+='<div class="chipform"><span class="lbl">チップ（枚数・1枚＝'+s.rule.chip+'点）</span><div class="chipgrid">'+all.map(id=>{const v=r1(((s.chips||{})[id]||0)/s.rule.chip);return '<div class="field"><label for="c-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('c-'+id)+'<input class="in num chip-in" id="c-'+id+'" inputmode="numeric" autocomplete="off" value="'+(v||'')+'" placeholder="0"></div></div>';}).join('')+'</div>'
+  if(w)h+='<div class="chipform"><div class="chiphead"><span class="chip-t">チップの<b>枚数</b>を入力</span><span class="chip-s">1枚＝'+s.rule.chip+'点でスコアに換算して足します</span></div><div class="chipgrid">'+all.map(id=>{const v=r1(((s.chips||{})[id]||0)/s.rule.chip);return '<div class="field"><label for="c-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('c-'+id)+'<input class="in num chip-in" id="c-'+id+'" inputmode="numeric" autocomplete="off" value="'+(v||'')+'" placeholder="0"><span class="unit">枚</span></div><span class="cv" id="cv-'+id+'"></span></div>';}).join('')+'</div>'
     +'<div class="formfoot"><span class="msg" id="c-msg"></span><button class="btn sm" data-act="save-chips">チップを保存</button></div></div>';
   h+='</section>';
   const yks=[];s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({y,no:nos[i].label})));
@@ -798,11 +805,11 @@ function renderTotals(){
   h+='<section><div class="sechead"><h3>累計スコア</h3><div class="seg" role="group" aria-label="並び順">'+[['total','チップ込み順'],['score','スコア順']].map(x=>'<button class="segb" data-act="tsort" data-v="'+x[0]+'" aria-pressed="'+((x[0]==='score')===(key==='pt'))+'">'+x[1]+'</button>').join('')+'</div></div>'
     +'<p class="period">'+list.length+'日・半荘'+games+'回</p><div class="table-scroll tot-wrap"><table class="tot"><thead><tr><th scope="col">#</th><th scope="col">名前</th><th scope="col" class="r">チップ込み</th><th scope="col" class="r">スコア</th><th scope="col" class="r">チップ</th><th scope="col" class="barcol"><span class="sr">'+(key==='pt'?'スコア':'チップ込み')+'の棒</span></th><th scope="col" class="r">半荘</th><th scope="col" class="r">平均順位</th><th scope="col" class="r">参加</th></tr></thead><tbody>'
     +byPt.map((id,i)=>{const x=t[id];const v=x[key];const wpct=(Math.abs(v)/maxAbs*50).toFixed(1);
-      return '<tr><td class="pos">'+(i+1)+'</td><td class="nmc">'+esc(pName(id))+'</td>'+cell(x.total,key==='total')+cell(x.pt,key==='pt')+'<td class="r '+sc(x.chipN)+'">'+fmtMai(x.chipN)+'</td>'+'<td class="barcol"><span class="bar"><i class="'+sc(v)+'" style="'+(v>=0?'left':'right')+':50%;width:'+wpct+'%"></i></span></td><td class="r">'+x.played+'</td><td class="r">'+(x.games?(x.rankSum/x.games).toFixed(2):'—')+'</td><td class="r">'+x.days+'日</td></tr>';}).join('')
+      return '<tr><td class="pos">'+(i+1)+'</td><td class="nmc">'+esc(pName(id))+'</td>'+cell(x.total,key==='total')+cell(x.pt,key==='pt')+cell(x.chip,false)+'<td class="barcol"><span class="bar"><i class="'+sc(v)+'" style="'+(v>=0?'left':'right')+':50%;width:'+wpct+'%"></i></span></td><td class="r">'+x.played+'</td><td class="r">'+(x.games?(x.rankSum/x.games).toFixed(2):'—')+'</td><td class="r">'+x.days+'日</td></tr>';}).join('')
     +'</tbody></table></div>'
     +'<ol class="totlist">'+byPt.map((id,i)=>{const x=t[id];const v=x[key];const wpct=(Math.abs(v)/maxAbs*50).toFixed(1);
       return '<li><span class="tp'+(i===0?' first':'')+'">'+(i+1)+'</span><span class="tn">'+esc(pName(id))+'</span><span class="tv '+sc(v)+'">'+fmtTot(v)+'</span>'
-        +'<span class="ts">'+(key==='pt'?'チップ込み <b class="'+sc(x.total)+'">'+fmtTot(x.total)+'</b>':'スコア <b class="'+sc(x.pt)+'">'+fmtTot(x.pt)+'</b>')+'・チップ <b class="'+sc(x.chipN)+'">'+fmtMai(x.chipN)+'</b></span>'
+        +'<span class="ts">'+(key==='pt'?'チップ込み <b class="'+sc(x.total)+'">'+fmtTot(x.total)+'</b>':'スコア <b class="'+sc(x.pt)+'">'+fmtTot(x.pt)+'</b>')+'・チップ <b class="'+sc(x.chip)+'">'+fmtChip(x.chip)+'</b></span>'
         +'<span class="ts">'+x.played+'半荘・平均順位 '+(x.games?(x.rankSum/x.games).toFixed(2):'—')+'・'+x.days+'日参加</span>'
         +'<span class="bar"><i class="'+sc(v)+'" style="'+(v>=0?'left':'right')+':50%;width:'+wpct+'%"></i></span></li>';}).join('')+'</ol></section>';
   const yks=[];
@@ -965,6 +972,7 @@ function updateChipSum(){
   const s=cur();if(!s||!document.getElementById('c-msg'))return;
   let sum=0,bad=false;
   Object.keys(dayTotals(s)).forEach(id=>{const el=document.getElementById('c-'+id);if(!el)return;const v=parseIntLoose(el.value);if(Number.isNaN(v))bad=true;else sum+=v;});
+  Object.keys(dayTotals(s)).forEach(id=>{const el=document.getElementById('c-'+id),cv=document.getElementById('cv-'+id);if(!el||!cv)return;const v=parseIntLoose(el.value);cv.textContent=Number.isNaN(v)||!v?'':'＝ '+fmtChip(r1(v*s.rule.chip))+'点';});
   if(bad)return setMsg('c-msg','チップは枚数を整数で入れてください','err');
   setMsg('c-msg',sum===0?'チップ合計 ±0枚':'チップ合計が '+fmtMai(sum)+' になっています',sum===0?'':'err');
 }
