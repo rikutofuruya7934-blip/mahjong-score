@@ -670,7 +670,7 @@ function gameForm(s){
   }
   return '<section class="panel" id="addgame"><div class="sechead"><h3>'+(editing?'半荘'+no+'を編集':'半荘'+no+'の記録')+'</h3>'
     +'<div class="seg" role="group" aria-label="入力方法">'+[['pt','スコア入力'],['raw','素点入力'],['sum','まとめ入力']].map(x=>'<button type="button" class="segb" data-act="g-kind" data-v="'+x[0]+'" aria-pressed="'+(gKind===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>'
-    +(editing?'':'<p class="once">記録の確定は、<b>誰か1人が1回だけ</b>押してください。</p>')
+    +(editing?'':'<p class="once">入力はみんな同時にできます。<b>記録の確定</b>は、<b>誰か1人が1回だけ</b>押してください。</p>')
     +dupNotice(s)
     +'<p class="hint">'+hint+'</p>'+body
     +(gKind==='sum'?'':'<div class="ykbox" id="tb-area">'+tobiArea(s)+'</div><div class="ykbox" id="yk-area">'+yakuArea(s)+'</div>')
