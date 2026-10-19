@@ -497,7 +497,7 @@ function stats(list){
       const r=gameResult(s,g);const ids=Object.keys(r);const n=ids.length;
       if(g.summary){ids.forEach(id=>{const x=get(id);x.pt+=r[id].pt;x.played+=gCount(g);seen.add(id);});return;}
       ids.forEach(id=>{const x=get(id),v=r[id];x.pt+=v.pt;x.games++;x.played++;x.r[v.rank-1]++;x.rankSum+=v.rank;if(v.last!==undefined?v.last:v.rank===n)x.last++;if(v.tobi)x.tobi++;x.bust+=v.bust;
-        if(!x.best||v.pt>x.best.pt)x.best={pt:v.pt,raw:v.raw,date:s.date};seen.add(id);});
+        const bp=r1(v.pt-(v.shugi||0));if(!x.best||bp>x.best.pt)x.best={pt:bp,raw:v.raw,date:s.date};seen.add(id);});
       (g.yaku||[]).forEach(y=>{if(!r[y.pid])return;const w=get(y.pid);w.yaku++;w.ykList.push(yakuNames(y)+'・'+(y.how==='tsumo'?'ツモ':'ロン'));if(y.how==='ron'&&r[y.from])get(y.from).hoju++;const p=shugiPay(y,ids);for(const k in p)get(k).shugi+=p[k];});
     });
     for(const id in (s.chips||{})){const c=s.chips[id]||0;if(!c)continue;get(id).chip+=c;get(id).chipN+=c/s.rule.chip;seen.add(id);}
@@ -852,7 +852,7 @@ function renderTotals(){
   cards.push(rankCard('ラス回避率',minNote,rateRows(x=>1-x.last/x.games,-1,x=>'ラス'+x.last+'回')));
   cards.push(rankCard('トビ回避率',minNote,rateRows(x=>1-x.tobi/x.games,-1,x=>'トビ'+x.tobi+'回')));
   cards.push(rankCard('トップ回数','',played.map(id=>({id,v:t[id].r[0]})).sort((a,b)=>b.v-a.v||t[a.id].games-t[b.id].games).map(r=>({id:r.id,v:r.v,label:r.v+'回',sub:t[r.id].games+'半荘中'}))));
-  cards.push(rankCard('最高スコア','1半荘',played.map(id=>({id,v:t[id].best.pt})).sort((a,b)=>b.v-a.v).map(r=>{const b=t[r.id].best;return {id:r.id,v:r.v,label:fmtPt(r.v),cls:sc(r.v),sub:(b.raw===null?'':'素点 '+fmtScore(b.raw)+'・')+shortDate(b.date)};})));
+  cards.push(rankCard('最高スコア','1半荘・祝儀抜き',played.map(id=>({id,v:t[id].best.pt})).sort((a,b)=>b.v-a.v).map(r=>{const b=t[r.id].best;return {id:r.id,v:r.v,label:fmtPt(r.v),cls:sc(r.v),sub:(b.raw===null?'':'素点 '+fmtScore(b.raw)+'・')+shortDate(b.date)};})));
   if(played.some(id=>t[id].bust))cards.push(rankCard('飛ばした回数','',played.filter(id=>t[id].bust).map(id=>({id,v:t[id].bust})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:r.v+'回',sub:t[r.id].games+'半荘中'}))));
   const ykIds=ids.filter(id=>t[id].yaku>0);
   const ykSub=x=>{const c={};x.ykList.forEach(k=>{c[k]=(c[k]||0)+1;});return Object.keys(c).map(k=>esc(k)+(c[k]>1?' ×'+c[k]:'')).join(' / ');};
