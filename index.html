@@ -337,7 +337,7 @@ const GROUP_UID='GnzYUokE79Q4vkfhgKvZm5smwUR2';       // そのアカウント�
 /* ============================================================ */
 const CONFIGURED=!FIREBASE_CONFIG.apiKey.startsWith('__');
 const DEFAULTS={"3":{start:35000,ret:40000,uma:[35,0,-20],tobi:10,shugi:20,chip:2},"4":{start:25000,ret:30000,uma:[50,10,-10,-30],tobi:10,shugi:20,chip:2}};
-const YAKU=['国士無双','四暗刻','大三元','字一色','小四喜','大四喜','緑一色','清老頭','九蓮宝燈','四槓子','天和','地和','数え役満','四暗刻単騎','国士無双十三面待ち','純正九蓮宝燈'];
+const YAKU=['国士無双','四暗刻','大三元','字一色','小四喜','大四喜','緑一色','清老頭','九蓮宝燈','四槓子','天和','地和','四暗刻単騎','国士無双十三面待ち','純正九蓮宝燈'];
 const clone=o=>JSON.parse(JSON.stringify(o));
 
 function normRule(r,mode){
@@ -787,13 +787,13 @@ function renderSession(s){
         :'<p class="hint">レートを押すと、1人ずつの金額が出ます。</p>')
       +'</div>';
   }
-  if(w)h+='<div class="chipform"><div class="chiphead"><span class="chip-t">チップの<b>枚数</b>を入力</span><span class="chip-s">1枚＝'+s.rule.chip+'点でスコアに換算して足します</span></div><div class="chipgrid">'+all.map(id=>{const v=r1(((s.chips||{})[id]||0)/s.rule.chip);return '<div class="field"><label for="c-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('c-'+id)+'<input class="in num chip-in" id="c-'+id+'" inputmode="numeric" autocomplete="off" value="'+(v||'')+'" placeholder="0"><span class="unit">枚</span></div><span class="cv" id="cv-'+id+'"></span></div>';}).join('')+'</div>'
-    +'<div class="formfoot"><span class="msg" id="c-msg"></span><button class="btn sm" data-act="save-chips">チップを保存</button></div></div>';
   h+='</section>';
   const yks=[];s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({y,no:nos[i].label})));
   if(yks.length)h+='<section><h3>この日の役満</h3><ul class="yklist">'+yks.map(o=>'<li><span class="when">半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(yakuNames(o.y))+'</span><span class="muted">'+yakuDesc(o.y,s.mode)+'</span></li>').join('')+'</ul></section>';
   if(w){
     h+=gameForm(s);
+    h+='<div class="chipform"><div class="chiphead"><span class="chip-t">チップの<b>枚数</b>を入力</span><span class="chip-s">1枚＝'+s.rule.chip+'点でスコアに換算して足します</span></div><div class="chipgrid">'+all.map(id=>{const v=r1(((s.chips||{})[id]||0)/s.rule.chip);return '<div class="field"><label for="c-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('c-'+id)+'<input class="in num chip-in" id="c-'+id+'" inputmode="numeric" autocomplete="off" value="'+(v||'')+'" placeholder="0"><span class="unit">枚</span></div><span class="cv" id="cv-'+id+'"></span></div>';}).join('')+'</div>'
+    +'<div class="formfoot"><span class="msg" id="c-msg"></span><button class="btn sm" data-act="save-chips">チップを保存</button></div></div>';
     const dk='s:'+s.id;
     h+='<section class="danger">'+(confirmKey===dk?'<p class="hint">この日の記録をすべて消します。元に戻せません。</p><button class="btn sm danger" data-act="del-session">削除する</button>':'<button class="btn sm danger-o" data-act="del-session">この日の記録を削除</button>')+'</section>';
   }
@@ -1066,6 +1066,7 @@ const act={
   'yk-add'(){
     syncYk();
     const parts=ykParts.filter(c=>c.name).map(c=>({name:c.name,mult:Number(c.mult)||1,pao:!!c.pao}));
+    if(parts.some(c=>/数え/.test(c.name)))return setMsg('yk-msg','数え役満は祝儀の対象外です（本役満だけ記録できます）','err');
     if(!parts.length)return setMsg('yk-msg','役の名前を入れてください','err');
     const amt=parseNum(ykAmt);
     if(!isFinite(amt)||amt<0)return setMsg('yk-msg','祝儀を0以上の数字で入れてください','err');
