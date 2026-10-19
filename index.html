@@ -367,7 +367,8 @@ const RATES=[['10','テンイチ'],['20','テンニ'],['30','テンサン'],['50
 let rate=(()=>{try{const v=localStorage.getItem('mj-rate');return RATES.some(r=>r[0]===v)?v:null;}catch(e){return null;}})();
 let newOpen=false,editOpen=false,confirmKey=null,mismatchArmed=false,nsMode=4;
 let gSeen=null,dupArmed=false;
-let gKind=store.get('mj-gkind')==='raw'?'raw':'pt',gEditId=null,gYaku=[],gTobi=[],ykOpen=false,ykHow='tsumo',ykParts=[],ykPid=null,ykFrom=null,ykPaoWho=null,ykAmt=null;
+const kindPref=()=>store.get('mj-gkind')==='pt'?'pt':'raw';
+let gKind=kindPref(),gEditId=null,gYaku=[],gTobi=[],ykOpen=false,ykHow='tsumo',ykParts=[],ykPid=null,ykFrom=null,ykPaoWho=null,ykAmt=null;
 let canWrite=false,busy=false,loginOpen=false,authUser=null,importDraft=null;
 const app=document.getElementById('app');
 const toastEl=document.createElement('div');toastEl.className='toast';toastEl.setAttribute('role','status');toastEl.setAttribute('aria-live','polite');
@@ -669,7 +670,7 @@ function gameForm(s){
     body='<div class="gform">'+s.members.map(id=>'<div class="field gfield"><label for="g-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('g-'+id)+'<input class="in num g-in" id="g-'+id+'" inputmode="numeric" autocomplete="off" placeholder="'+(s.rule.start/100)+'"><span class="unit">00</span></div></div>').join('')+'</div><p class="preview" id="g-prev"></p>';
   }
   return '<section class="panel" id="addgame"><div class="sechead"><h3>'+(editing?'半荘'+no+'を編集':'半荘'+no+'の記録')+'</h3>'
-    +'<div class="seg" role="group" aria-label="入力方法">'+[['pt','スコア入力'],['raw','素点入力'],['sum','まとめ入力']].map(x=>'<button type="button" class="segb" data-act="g-kind" data-v="'+x[0]+'" aria-pressed="'+(gKind===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>'
+    +'<div class="seg" role="group" aria-label="入力方法">'+[['raw','素点入力'],['pt','スコア入力'],['sum','まとめ入力']].map(x=>'<button type="button" class="segb" data-act="g-kind" data-v="'+x[0]+'" aria-pressed="'+(gKind===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>'
     +(editing?'':'<p class="once">入力はみんな同時にできます。<b>記録の確定</b>は、<b>誰か1人が1回だけ</b>押してください。</p>')
     +dupNotice(s)
     +'<p class="hint">'+hint+'</p>'+body
@@ -1001,7 +1002,7 @@ function updateChipSum(){
 }
 
 /* ---------- actions ---------- */
-function resetGameForm(){gSeen=null;dupArmed=false;gEditId=null;gYaku=[];gTobi=[];ykOpen=false;ykHow='tsumo';ykParts=[];ykPid=ykFrom=ykPaoWho=ykAmt=null;}
+function resetGameForm(){gKind=kindPref();gSeen=null;dupArmed=false;gEditId=null;gYaku=[];gTobi=[];ykOpen=false;ykHow='tsumo';ykParts=[];ykPid=ykFrom=ykPaoWho=ykAmt=null;}
 function nav(patch){Object.assign(ui,patch);newOpen=false;editOpen=false;confirmKey=null;resetGameForm();persistUi();render();window.scrollTo(0,0);}
 const act={
   tab(b){nav({tab:b.dataset.tab,sid:null});},
