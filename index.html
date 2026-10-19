@@ -849,8 +849,8 @@ function renderTotals(){
   cards.push(rankCard('平均順位',note('小さい順',minNote),rated.map(id=>({id,v:t[id].rankSum/t[id].games})).sort((a,b)=>a.v-b.v||t[b.id].games-t[a.id].games).map(r=>({id:r.id,v:r.v,label:r.v.toFixed(2),sub:t[r.id].r.map((c,i)=>(i+1)+'位'+c).slice(0,ui.tMode==='3'?3:4).join(' ')}))));
   cards.push(rankCard('トップ率',minNote,rateRows(x=>x.r[0]/x.games,-1,x=>'トップ'+x.r[0])));
   cards.push(rankCard('連対率',minNote,rateRows(x=>(x.r[0]+x.r[1])/x.games,-1,x=>'1・2位'+(x.r[0]+x.r[1]))));
-  cards.push(rankCard('ラス率',note('低い順',minNote),rateRows(x=>x.last/x.games,1,x=>'ラス'+x.last)));
-  cards.push(rankCard('トビ率',note('低い順',minNote),rateRows(x=>x.tobi/x.games,1,x=>'トビ'+x.tobi)));
+  cards.push(rankCard('ラス回避率',minNote,rateRows(x=>1-x.last/x.games,-1,x=>'ラス'+x.last+'回')));
+  cards.push(rankCard('トビ回避率',minNote,rateRows(x=>1-x.tobi/x.games,-1,x=>'トビ'+x.tobi+'回')));
   cards.push(rankCard('トップ回数','',played.map(id=>({id,v:t[id].r[0]})).sort((a,b)=>b.v-a.v||t[a.id].games-t[b.id].games).map(r=>({id:r.id,v:r.v,label:r.v+'回',sub:t[r.id].games+'半荘中'}))));
   cards.push(rankCard('最高スコア','1半荘',played.map(id=>({id,v:t[id].best.pt})).sort((a,b)=>b.v-a.v).map(r=>{const b=t[r.id].best;return {id:r.id,v:r.v,label:fmtPt(r.v),cls:sc(r.v),sub:(b.raw===null?'':'素点 '+fmtScore(b.raw)+'・')+shortDate(b.date)};})));
   if(played.some(id=>t[id].bust))cards.push(rankCard('飛ばした回数','',played.filter(id=>t[id].bust).map(id=>({id,v:t[id].bust})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:r.v+'回',sub:t[r.id].games+'半荘中'}))));
