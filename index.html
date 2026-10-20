@@ -302,6 +302,11 @@ html,body{overflow-x:clip}
 .totlist .ts b{font-family:var(--num);font-weight:600}
 .totlist .bar{grid-column:2/4;margin-top:4px}
 @media (max-width:640px){
+  /* phones: one player per row (name left, input right) so the input list always reads top to bottom */
+  #addgame .gform,.chipgrid{grid-template-columns:1fr;gap:6px}
+  #addgame .gform .gfield,.chipgrid .field{display:grid;grid-template-columns:minmax(0,6.5em) minmax(0,1fr);column-gap:10px;align-items:center}
+  #addgame .gform .gfield label,.chipgrid .field label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chipgrid .field .cv{grid-column:2;min-height:0}
   .tot-wrap{display:none}
   .totlist{display:flex}
   .sechead>.seg,.filters>.seg,#addgame .seg{width:100%}
