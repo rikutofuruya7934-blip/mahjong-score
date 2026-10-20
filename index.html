@@ -412,7 +412,7 @@ function parsePtIn(str){const t=norm(str);if(t==='')return null;if(!/^[+-]?\d+(\
 function parseIntLoose(str){const t=norm(str);if(t==='')return 0;if(!/^[+-]?\d+$/.test(t))return NaN;return parseInt(t,10);}
 function parseNum(str){const t=norm(str);if(!/^[+-]?\d+(\.\d+)?$/.test(t))return NaN;return parseFloat(t);}
 function umaText(u){return u.map(x=>sgn(x)+Math.abs(x)).join(' / ');}
-function ruleText(s){const r=s.rule;return fmtScore(r.start)+'持ち'+fmtScore(r.ret)+'返し・順位点 '+umaText(r.uma)+'・トビ±'+r.tobi+'・役満祝儀 '+r.shugi+'オール・チップ1枚'+r.chip+'点';}
+function ruleText(s){const r=s.rule;return fmtScore(r.start)+'持ち'+fmtScore(r.ret)+'返し・順位点 '+umaText(r.uma)+'・トビ±'+r.tobi+'・役満祝儀 チップ'+r1(r.shugi/r.chip)+'枚オール・チップ1枚'+r.chip+'点';}
 /* 役満: 1回の和了に複合した役を yakus:[{name,mult,pao}] で持つ（古い記録は name/pao から読み替え） */
 const DOUBLE_YAKU=['大四喜','純正九蓮宝燈','純正九蓮','国士無双十三面待ち','国士無双十三面','国士十三面','四暗刻単騎','四暗刻単騎待ち','スッタン'];
 const multOf=n=>DOUBLE_YAKU.includes(String(n||'').trim())?2:1;
@@ -420,11 +420,13 @@ function yakuParts(y){return Array.isArray(y.yakus)&&y.yakus.length?y.yakus:[{na
 const yakuMult=y=>yakuParts(y).reduce((a,c)=>a+(Number(c.mult)||1),0);
 const multName=m=>m===1?'役満':m===2?'ダブル役満':m===3?'トリプル役満':m+'倍役満';
 function yakuNames(y){return yakuParts(y).map(c=>c.name+((Number(c.mult)||1)>1?'（×'+c.mult+'）':'')).join('＋');}
-function yakuDesc(y,n){
+function yakuDesc(y,n,cr){
+  cr=cr||2;
   const parts=yakuParts(y),m=yakuMult(y),pp=parts.filter(c=>c.pao);
   let t=y.how==='tsumo'?'ツモ':'ロン（放銃：'+esc(pName(y.from))+'）';
   if(y.pao&&pp.length)t+='・包：'+esc(pName(y.pao))+(parts.length>1?'（'+pp.map(c=>esc(c.name)).join('・')+'の分）':'');
-  t+='・祝儀 '+(Number(y.amount)||0)+(m>1?'×'+m:'')+(y.how==='tsumo'&&!pp.length?'オール':'')+'（計+'+absTxt(r1((Number(y.amount)||0)*m*(n-1)))+'）';
+  const a=r1((Number(y.amount)||0)/cr);
+  t+='・祝儀 '+a+'枚'+(m>1?'×'+m:'')+(y.how==='tsumo'&&!pp.length?'オール':'')+'（計+'+absTxt(r1(a*m*(n-1)))+'枚）';
   return t;
 }
 
@@ -461,7 +463,7 @@ function gameResult(s,g){
   if(g.pts){
     const order=Array.isArray(g.order)?ids:ids.slice().sort((a,b)=>(g.pts[b]-g.pts[a])||(ids.indexOf(a)-ids.indexOf(b)));
     const sh={};(g.yaku||[]).forEach(y=>{const p=shugiPay(y,order);for(const k in p)sh[k]=(sh[k]||0)+p[k];});
-    order.forEach((id,i)=>{const v=sh[id]||0,inc=!g.shugiSep;out[id]={rank:i+1,raw:null,shugi:r1(v),base:r1(inc?g.pts[id]-v:g.pts[id]),pt:r1(inc?g.pts[id]:g.pts[id]+v),last:i===order.length-1};});
+    order.forEach((id,i)=>{const v=sh[id]||0,inc=!g.shugiSep;out[id]={rank:i+1,raw:null,shugi:r1(v),base:r1(inc?g.pts[id]-v:g.pts[id]),pt:r1(inc?g.pts[id]-v:g.pts[id]),last:i===order.length-1};});
   }else{
     const order=ids.slice().sort((a,b)=>(g.scores[b]-g.scores[a])||(ids.indexOf(a)-ids.indexOf(b)));
     /* 同じ素点の人は同着：順位点を平均して分け合い、同じスコアになる。1位グループは残り全員の合計を等分 */
@@ -479,7 +481,7 @@ function gameResult(s,g){
     const adj={};
     tob.forEach(t=>{if(!out[t.pid]||!t.by||!out[t.by]||t.by===t.pid)return;adj[t.pid]=(adj[t.pid]||0)-r.tobi;adj[t.by]=(adj[t.by]||0)+r.tobi;});
     const sh={};(g.yaku||[]).forEach(y=>{const p=shugiPay(y,order);for(const k in p)sh[k]=(sh[k]||0)+p[k];});
-    order.forEach(id=>{out[id].shugi=r1(sh[id]||0);out[id].tobiAdj=adj[id]||0;out[id].pt=r1(out[id].base+(adj[id]||0)+(sh[id]||0));});
+    order.forEach(id=>{out[id].shugi=r1(sh[id]||0);out[id].tobiAdj=adj[id]||0;out[id].pt=r1(out[id].base+(adj[id]||0));});
   }
   for(const id in out){out[id].tobi=tob.some(t=>t.pid===id)||(out[id].raw!==null&&out[id].raw<0);out[id].bust=tob.filter(t=>t.by===id&&out[t.pid]).length;}
   return out;
@@ -491,11 +493,11 @@ function seatDue(s){const n=totalGames(s);return n>0&&n%4===0&&s.games.length>0&
 function totalGames(s){return s.games.reduce((a,g)=>a+gCount(g),0);}
 function gameNos(s){let n=1;return s.games.map(g=>{const c=gCount(g);const o={start:n,label:c>1?n+'〜'+(n+c-1):String(n)};n+=c;return o;});}
 function dayTotals(s){
-  const t={};const mk=()=>({pt:0,games:0,chip:0,chipN:0});
+  const t={};const mk=()=>({pt:0,games:0,chip:0,chipN:0,shugi:0,hand:0});
   s.members.forEach(id=>{t[id]=mk();});
-  s.games.forEach(g=>{const r=gameResult(s,g);for(const id in r){if(!t[id])t[id]=mk();t[id].pt+=r[id].pt;t[id].games+=gCount(g);}});
-  for(const id in (s.chips||{})){if(!t[id])t[id]=mk();t[id].chip=s.chips[id]||0;t[id].chipN=r1(t[id].chip/s.rule.chip);}
-  for(const id in t){t[id].pt=r1(t[id].pt);t[id].total=r1(t[id].pt+t[id].chip);}
+  s.games.forEach(g=>{const r=gameResult(s,g);for(const id in r){if(!t[id])t[id]=mk();t[id].pt+=r[id].pt;t[id].shugi+=r[id].shugi||0;t[id].games+=gCount(g);}});
+  for(const id in (s.chips||{})){if(!t[id])t[id]=mk();t[id].hand=s.chips[id]||0;}
+  for(const id in t){const x=t[id];x.pt=r1(x.pt);x.shugi=r1(x.shugi);x.chip=r1(x.hand+x.shugi);x.chipN=r1(x.chip/s.rule.chip);x.shugiN=r1(x.shugi/s.rule.chip);x.total=r1(x.pt+x.chip);}
   return t;
 }
 function filtered(mode,year){return data.sessions.filter(s=>(mode==='all'||String(s.mode)===mode)&&(year==='all'||s.date.slice(0,4)===year));}
@@ -508,8 +510,8 @@ function stats(list){
       const r=gameResult(s,g);const ids=Object.keys(r);const n=ids.length;
       if(g.summary){ids.forEach(id=>{const x=get(id);x.pt+=r[id].pt;x.played+=gCount(g);seen.add(id);});return;}
       ids.forEach(id=>{const x=get(id),v=r[id];x.pt+=v.pt;x.games++;x.played++;x.r[v.rank-1]++;x.rankSum+=v.rank;if(v.last!==undefined?v.last:v.rank===n)x.last++;if(v.tobi)x.tobi++;x.bust+=v.bust;
-        const bp=r1(v.pt-(v.shugi||0));if(!x.best||bp>x.best.pt)x.best={pt:bp,raw:v.raw,date:s.date};seen.add(id);});
-      (g.yaku||[]).forEach(y=>{if(!r[y.pid])return;const w=get(y.pid);w.yaku++;w.ykList.push(yakuNames(y)+'・'+(y.how==='tsumo'?'ツモ':'ロン'));if(y.how==='ron'&&r[y.from])get(y.from).hoju++;const p=shugiPay(y,ids);for(const k in p)get(k).shugi+=p[k];});
+        if(!x.best||v.pt>x.best.pt)x.best={pt:v.pt,raw:v.raw,date:s.date};seen.add(id);});
+      (g.yaku||[]).forEach(y=>{if(!r[y.pid])return;const w=get(y.pid);w.yaku++;w.ykList.push(yakuNames(y)+'・'+(y.how==='tsumo'?'ツモ':'ロン'));if(y.how==='ron'&&r[y.from])get(y.from).hoju++;const p=shugiPay(y,ids);for(const k in p){const z=get(k);z.shugi+=p[k];z.chip+=p[k];z.chipN+=p[k]/s.rule.chip;seen.add(k);}});
     });
     for(const id in (s.chips||{})){const c=s.chips[id]||0;if(!c)continue;get(id).chip+=c;get(id).chipN+=c/s.rule.chip;seen.add(id);}
     seen.forEach(id=>get(id).days++);
@@ -593,7 +595,7 @@ function ruleFields(p,mode,rule){
     +'<div class="uma"><div class="field"><span class="lbl">1位の順位点</span><span class="auto filled" id="'+p+'-uma0">'+fmtPt(rule.uma[0])+'</span></div>'
     +rule.uma.slice(1).map((u,j)=>{const i=j+1;return '<div class="field"><label for="'+p+'-uma-'+i+'">'+(i+1)+'位の順位点</label><div class="inrow">'+signBtn(p+'-uma-'+i)+'<input class="in num" id="'+p+'-uma-'+i+'" inputmode="numeric" value="'+u+'"></div></div>';}).join('')+'</div>'
     +'<div class="rgrid"><div class="field"><label for="'+p+'-tobi">トビ（飛んだ人 −、飛ばした人 ＋）</label><input class="in num" id="'+p+'-tobi" inputmode="decimal" value="'+rule.tobi+'"></div>'
-    +'<div class="field"><label for="'+p+'-shugi">役満祝儀（オール）</label><input class="in num" id="'+p+'-shugi" inputmode="decimal" value="'+rule.shugi+'"></div>'
+    +'<div class="field"><label for="'+p+'-shugi">役満祝儀（チップ何枚オール）</label><input class="in num" id="'+p+'-shugi" inputmode="decimal" value="'+r1(rule.shugi/rule.chip)+'"></div>'
     +'<div class="field"><label for="'+p+'-chip">チップ1枚の点数</label><input class="in num" id="'+p+'-chip" inputmode="decimal" value="'+rule.chip+'"></div></div></fieldset>';
 }
 function readRule(p,mode){
@@ -602,10 +604,11 @@ function readRule(p,mode){
   const uma=[0];
   for(let i=1;i<mode;i++){const v=parseNum($('#'+p+'-uma-'+i).value);if(!isFinite(v))return {err:(i+1)+'位の順位点を数字で入れてください'};uma.push(v);}
   uma[0]=r1((ret-start)*mode/1000-uma.slice(1).reduce((a,b)=>a+b,0));
-  const tobi=parseNum($('#'+p+'-tobi').value),shugi=parseNum($('#'+p+'-shugi').value);
-  if(!isFinite(tobi)||!isFinite(shugi)||tobi<0||shugi<0)return {err:'トビと役満祝儀を0以上の数字で入れてください'};
   const chip=parseNum($('#'+p+'-chip').value);
   if(!(chip>0))return {err:'チップ1枚の点数を0より大きい数字で入れてください'};
+  const tobi=parseNum($('#'+p+'-tobi').value),shugiN=parseNum($('#'+p+'-shugi').value);
+  if(!isFinite(tobi)||!isFinite(shugiN)||tobi<0||shugiN<0)return {err:'トビと役満祝儀を0以上の数字で入れてください'};
+  const shugi=r1(shugiN*chip);
   return {rule:{start,ret,uma,tobi,shugi,chip}};
 }
 function setMsg(id,text,kind){const el=document.getElementById(id);if(el){el.textContent=text;el.className='msg'+(kind?' '+kind:'');}}
@@ -713,7 +716,7 @@ function tobiArea(s){
 }
 function yakuArea(s){
   let h='<span class="lbl">役満</span>';
-  if(gYaku.length)h+='<ul class="yklist">'+gYaku.map((y,i)=>'<li><span class="badge yk">'+multName(yakuMult(y))+'</span><b>'+esc(pName(y.pid))+'</b><span>'+esc(yakuNames(y))+'</span><span class="muted">'+yakuDesc(y,s.mode)+'</span><button type="button" class="btn xs ghost" data-act="yk-del" data-i="'+i+'" aria-label="この役満を取り消す">×</button></li>').join('')+'</ul>';
+  if(gYaku.length)h+='<ul class="yklist">'+gYaku.map((y,i)=>'<li><span class="badge yk">'+multName(yakuMult(y))+'</span><b>'+esc(pName(y.pid))+'</b><span>'+esc(yakuNames(y))+'</span><span class="muted">'+yakuDesc(y,s.mode,s.rule.chip)+'</span><button type="button" class="btn xs ghost" data-act="yk-del" data-i="'+i+'" aria-label="この役満を取り消す">×</button></li>').join('')+'</ul>';
   if(!ykOpen)return h+'<div><button type="button" class="btn sm" data-act="yk-open">＋ この半荘の役満を記録</button></div>';
   const anyPao=ykParts.some(c=>c.pao);
   const rows=ykParts.map((c,i)=>'<div class="ykpart"><input class="in yk-name" id="yk-name-'+i+'" data-i="'+i+'" list="yk-names" placeholder="'+(i?'字一色':'大三元')+'" autocomplete="off" maxlength="30" value="'+esc(c.name)+'" aria-label="役'+(i+1)+'">'
@@ -725,7 +728,7 @@ function yakuArea(s){
     +'<div class="field"><label for="yk-pid">和了した人</label><select class="in" id="yk-pid">'+memberOpts(s,ykPid||s.members[0])+'</select></div>'
     +'<div class="field"><span class="lbl">和了の形</span><div class="seg" role="group" aria-label="和了の形">'+[['tsumo','ツモ'],['ron','ロン']].map(x=>'<button type="button" class="segb" data-act="yk-how" data-v="'+x[0]+'" aria-pressed="'+(ykHow===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>'
     +'<div class="field" id="yk-from-f"'+(ykHow==='ron'?'':' hidden')+'><label for="yk-from">放銃した人</label><select class="in" id="yk-from">'+memberOpts(s,ykFrom||s.members[1])+'</select></div>'
-    +'<div class="field"><label for="yk-amt">祝儀（役満1つ分のオール）</label><input class="in num" id="yk-amt" inputmode="decimal" value="'+(ykAmt!==null?esc(ykAmt):s.rule.shugi)+'"></div>'
+    +'<div class="field"><label for="yk-amt">祝儀（役満1つ分・チップ何枚オール）</label><input class="in num" id="yk-amt" inputmode="decimal" value="'+(ykAmt!==null?esc(ykAmt):r1(s.rule.shugi/s.rule.chip))+'"></div>'
     +'</div>'
     +'<div class="field"><span class="lbl">役（複合したら追加。ダブル役満は×2）</span><div class="ykparts">'+rows+'</div><div><button type="button" class="btn sm ghost" data-act="yk-padd">＋ 複合した役を追加</button></div></div>'
     +'<datalist id="yk-names">'+YAKU.map(y=>'<option value="'+y+'"></option>').join('')+'</datalist>'
@@ -760,7 +763,7 @@ function renderSession(s){
   const due=seatDue(s);
   if(due)h+='<div class="seatbar" role="status"><span class="stick" aria-hidden="true"><i></i></span><div class="seatbar-b"><p class="seatbar-t">席替えです</p><p class="seatbar-s">'+due+'半荘が終わりました。'+(due+1)+'半荘目は席を替えてから</p></div></div>';
   if(ord.length){
-    h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+esc(pName(id))+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtMai(t[id].chipN)+'（'+fmtChip(t[id].chip)+'）</span></span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
+    h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+esc(pName(id))+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtMai(t[id].chipN)+'（'+fmtChip(t[id].chip)+'）</span>'+(t[id].shugi?'<br>うち祝儀 '+fmtMai(t[id].shugiN):'')+'</span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
   }
   h+='<section><div class="sechead"><h3>半荘ごとの記録</h3>'+(w&&s.games.length?'<span class="hint">番号をタップで編集・削除</span>':'')+'</div>';
   if(!s.games.length)h+='<p class="hint">まだ半荘がありません。'+(w?'下の入力欄から1半荘ずつ記録してください。':'')+'</p>';
@@ -772,7 +775,7 @@ function renderSession(s){
       if(!r[id])return '<td class="out">抜け</td>';const v=r[id];
       if(v.summary)return '<td><span class="ptl"><span class="pt '+sc(v.pt)+'">'+fmtPt(v.pt)+'</span></span><span class="raw">'+gCount(g)+'半荘計</span></td>';
       const tags=(v.tie?'<span class="tag sh">同着</span>':'')+(v.tobi?'<span class="tag tb">トビ</span>':'')+(v.bust?'<span class="tag sh">飛ばし'+(v.bust>1?'×'+v.bust:'')+'</span>':'');
-      const sp=r1(v.pt-(v.shugi||0));
+      const sp=v.pt;
       return '<td><span class="ptl"><span class="rk r'+v.rank+'" aria-label="'+v.rank+'位">'+v.rank+'</span><span class="pt '+sc(sp)+'">'+fmtPt(sp)+'</span></span>'+(v.raw===null?'':'<span class="raw">'+fmtScore(v.raw)+'</span>')+(tags?'<span class="tags">'+tags+'</span>':'')+'</td>';
     }).join('');
     const mark=(g.summary?'<span class="tag sh">まとめ</span>':'')+((g.yaku||[]).length?'<span class="tag sh">役満</span>':'');
@@ -780,12 +783,12 @@ function renderSession(s){
     const ids=Object.keys(r);
     const ykRows=g.summary?'':(g.yaku||[]).map(y=>{const pay=shugiPay(y,ids);if(!Object.keys(pay).length)return '';
       return '<tr class="ykrow'+(gEditId===g.id?' editing':'')+'"><th scope="row" class="no"><span class="tag yk">祝儀</span><span class="ykn">'+esc(yakuNames(y))+'</span></th>'
-        +all.map(id=>{const v=r1(pay[id]||0);return '<td>'+(v?'<span class="pt '+sc(v)+'">'+fmtPt(v)+'</span>':'')+'</td>';}).join('')+'</tr>';}).join('');
+        +all.map(id=>{const v=r1(pay[id]||0);return '<td>'+(v?'<span class="pt '+sc(v)+'">'+fmtMai(v/s.rule.chip)+'</span>':'')+'</td>';}).join('')+'</tr>';}).join('');
     return '<tr'+(gEditId===g.id?' class="editing"':'')+'><th scope="row" class="no">'+no+(mark?'<span class="tags">'+mark+'</span>':'')+'</th>'+cells+'</tr>'+ykRows;
   }).join('');
   const foot=(lab,f)=>'<tr'+(lab==='合計'?' class="sum"':'')+'><th scope="row">'+lab+'</th>'+all.map(id=>{const v=f(id);return '<td class="'+sc(v)+'">'+(lab==='チップ'?fmtChip(v)+(v?'<span class="raw">'+fmtMai(v/s.rule.chip)+'</span>':''):fmtTot(v))+'</td>';}).join('')+'</tr>';
   h+='<div class="table-scroll"><table class="score"><colgroup><col class="c-no">'+all.map(()=>'<col>').join('')+'</colgroup><thead><tr><th scope="col">半荘</th>'+head+'</tr></thead><tbody>'+rows+'</tbody><tfoot>'
-    +foot('スコア',id=>t[id].pt)+foot('チップ',id=>(s.chips||{})[id]||0)+foot('合計',id=>t[id].total)+'</tfoot></table></div>';
+    +foot('スコア',id=>t[id].pt)+foot('チップ',id=>t[id].chip)+foot('合計',id=>t[id].total)+'</tfoot></table></div>';
   if(s.games.length||Object.keys(s.chips||{}).length){
     const ord2=all.filter(id=>t[id].games>0||t[id].chip).sort((a,b)=>t[b].total-t[a].total);
     const k=rate?Number(rate):0;
@@ -799,7 +802,7 @@ function renderSession(s){
   }
   h+='</section>';
   const yks=[];s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({y,no:nos[i].label})));
-  if(yks.length)h+='<section><h3>この日の役満</h3><ul class="yklist">'+yks.map(o=>'<li><span class="when">半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(yakuNames(o.y))+'</span><span class="muted">'+yakuDesc(o.y,s.mode)+'</span></li>').join('')+'</ul></section>';
+  if(yks.length)h+='<section><h3>この日の役満</h3><ul class="yklist">'+yks.map(o=>'<li><span class="when">半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(yakuNames(o.y))+'</span><span class="muted">'+yakuDesc(o.y,s.mode,s.rule.chip)+'</span></li>').join('')+'</ul></section>';
   if(w){
     h+=gameForm(s);
     h+='<div class="chipform"><div class="chiphead"><span class="chip-t">チップの<b>枚数</b>を入力</span><span class="chip-s">1枚＝'+s.rule.chip+'点でスコアに換算して足します</span></div><div class="chipgrid">'+all.map(id=>{const v=r1(((s.chips||{})[id]||0)/s.rule.chip);return '<div class="field"><label for="c-'+id+'">'+esc(pName(id))+'</label><div class="inrow">'+signBtn('c-'+id)+'<input class="in num chip-in" id="c-'+id+'" inputmode="numeric" autocomplete="off" value="'+(v||'')+'" placeholder="0"><span class="unit">枚</span></div><span class="cv" id="cv-'+id+'"></span></div>';}).join('')+'</div>'
@@ -849,7 +852,7 @@ function renderTotals(){
   const yks=[];
   list.forEach(s=>{const nos=gameNos(s);s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({s,y,no:nos[i].label,st:nos[i].start})));});
   yks.sort((a,b)=>b.s.date.localeCompare(a.s.date)||b.st-a.st);
-  h+='<section><h3>役満の記録</h3>'+(yks.length?'<ul class="yklist">'+yks.map(o=>'<li><span class="when">'+shortDate(o.s.date)+' 半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(yakuNames(o.y))+'</span><span class="muted">'+yakuDesc(o.y,o.s.mode)+'</span></li>').join('')+'</ul>':'<p class="hint">この条件ではまだ役満は出ていません。</p>')+'</section>';
+  h+='<section><h3>役満の記録</h3>'+(yks.length?'<ul class="yklist">'+yks.map(o=>'<li><span class="when">'+shortDate(o.s.date)+' 半荘'+o.no+'</span><b>'+esc(pName(o.y.pid))+'</b><span>'+esc(yakuNames(o.y))+'</span><span class="muted">'+yakuDesc(o.y,o.s.mode,o.s.rule.chip)+'</span></li>').join('')+'</ul>':'<p class="hint">この条件ではまだ役満は出ていません。</p>')+'</section>';
   const played=ids.filter(id=>t[id].games>0);
   const rated=played.filter(id=>t[id].games>=tMin);
   const minNote=tMin?tMin+'半荘以上':'';
@@ -891,7 +894,7 @@ function renderSettings(){
     +'<li><b>スコアで入力</b>：2位以下の人とスコアを入れると、1位のスコアは合計が0になるように自動で入ります。トビ込みのスコアを入れ、トビは記録として残します。役満祝儀はスコアに含めず、役満を記録すると祝儀の行として別に足されます。</li>'
     +'<li><b>素点で入力</b>：2位以下は（素点 − 返し）÷ 1000 を、返し未満は切り上げ・返し以上は切り捨てで整数にし、順位点を足します。1位は2位以下の合計を全部引き受けるので、端数のズレは1位で調整されます。</li>'
     +'<li>素点入力のトビ：素点がマイナスの人（0点ちょうどは除く）がトビで、飛んだ人から飛ばした人へトビの点が移ります。</li>'
-    +'<li>役満祝儀：ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。祝儀は半荘のスコアとは別の行で表示して、合計に足します。</li>'
+    +'<li>役満祝儀：チップとして扱います（スコアには入りません）。ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。対局記録では役満ごとに祝儀の行を出し、その日のチップに足します。</li>'
     +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順です。素点が同じ人は同着で、順位点を分け合って同じスコアになります（1位同着なら1位の分を等分）。トビは何人同時でも、飛んだ人それぞれから飛ばした人へトビの点が移ります。</li>'
     +'<li>チップは枚数で入れると、1枚＝2点（ルールで変更できます）でスコアに換算して足します。成績ではチップ込みとスコアのみの両方を出し、チップのランキングは枚数で出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
     +'<section><h2>データ</h2><p class="hint">全記録をテキスト（JSON）で書き出せます。バックアップや、Claudeに渡して記録を作ってもらうときに使います。</p><div class="formfoot" style="justify-content:flex-start"><button class="btn sm" data-act="copy-json">記録データをコピー</button><button class="btn sm" data-act="dl-json">ファイルで保存</button></div><div id="json-box"></div>'
@@ -1078,7 +1081,7 @@ const act={
     const parts=ykParts.filter(c=>c.name).map(c=>({name:c.name,mult:Number(c.mult)||1,pao:!!c.pao}));
     if(parts.some(c=>/数え/.test(c.name)))return setMsg('yk-msg','数え役満は祝儀の対象外です（本役満だけ記録できます）','err');
     if(!parts.length)return setMsg('yk-msg','役の名前を入れてください','err');
-    const amt=parseNum(ykAmt);
+    const amt=r1(parseNum(ykAmt)*cur().rule.chip);
     if(!isFinite(amt)||amt<0)return setMsg('yk-msg','祝儀を0以上の数字で入れてください','err');
     const y={pid:ykPid,name:parts.map(c=>c.name).join('＋'),how:ykHow,amount:amt,yakus:parts};
     if(ykHow==='ron'){y.from=ykFrom;if(y.from===y.pid)return setMsg('yk-msg','和了した人と放銃した人が同じです','err');}
