@@ -505,7 +505,8 @@ function dayTotals(s){
   for(const id in t){const x=t[id];x.pt=r1(x.pt);x.shugi=r1(x.shugi);x.chip=r1(x.hand+x.shugi);x.chipN=r1(x.chip/s.rule.chip);x.shugiN=r1(x.shugi/s.rule.chip);x.total=r1(x.pt+x.chip);}
   return t;
 }
-function filtered(mode,year){return data.sessions.filter(s=>(mode==='all'||String(s.mode)===mode)&&(year==='all'||s.date.slice(0,4)===year));}
+const hasGuest=s=>s.members.some(isGuest);
+function filtered(mode,year){return data.sessions.filter(s=>!hasGuest(s)&&(mode==='all'||String(s.mode)===mode)&&(year==='all'||s.date.slice(0,4)===year));}
 function stats(list){
   const t={};const mk=()=>({pt:0,games:0,played:0,r:[0,0,0,0],rankSum:0,last:0,tobi:0,bust:0,best:null,chip:0,chipN:0,shugi:0,yaku:0,ykList:[],hoju:0,days:0});
   const get=id=>t[id]||(t[id]=mk());
@@ -582,7 +583,7 @@ function memberPicker(p,selected,locked){
   const chips=order.map(id=>'<button type="button" class="mchip" data-act="mtoggle" data-pid="'+id+'" aria-pressed="'+sel.has(id)+'"'+(locked&&locked.has(id)?' data-locked="1" title="この日の記録があるので外せません"':'')+'>'+pLabel(id)+'</button>').join('');
   return '<div class="field"><span class="lbl">メンバー</span><div class="mchips" id="'+p+'-members">'+chips+'</div>'
     +'<div class="addname"><input class="in" id="'+p+'-newname" placeholder="新しい人の名前" maxlength="20" autocomplete="off"><button type="button" class="btn sm" data-act="maddname" data-prefix="'+p+'">メンバー</button><button type="button" class="btn sm" data-act="maddname" data-prefix="'+p+'" data-guest="1">ゲスト</button></div>'
-    +'<p class="hint">ゲストは対局記録と精算には出ますが、成績・ランキングには入りません。</p></div>';
+    +'<p class="hint">ゲストが入った日は、記録と精算はできますが、その日の分はメンバーも含めて成績・ランキングには入りません。</p></div>';
 }
 function collectMembers(p){
   const out=[];
@@ -641,7 +642,7 @@ function renderLog(){
     const yk=s.games.reduce((a,g)=>a+(g.yaku||[]).length,0);
     const res=ord.length?ord.map(id=>'<span class="dr"><span class="nm">'+pLabel(id)+'</span><span class="pt '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span>'+(t[id].chip?'<span class="ch">チップ'+fmtMai(t[id].chipN)+'</span>':'')+'</span>').join('')
       :'<span class="none">'+s.members.map(id=>esc(pName(id))).join('・')+'（半荘はまだありません）</span>';
-    return '<li><button class="day" data-act="open" data-sid="'+s.id+'"><span class="dhead"><span class="ddate">'+fmtDate(s.date)+'</span><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span><span class="dcount">半荘'+totalGames(s)+'回</span>'+(seatDue(s)?'<span class="badge seat">席替え</span>':'')+(yk?'<span class="badge yk">役満 '+yk+'</span>':'')+'</span>'
+    return '<li><button class="day" data-act="open" data-sid="'+s.id+'"><span class="dhead"><span class="ddate">'+fmtDate(s.date)+'</span><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span><span class="dcount">半荘'+totalGames(s)+'回</span>'+(seatDue(s)?'<span class="badge seat">席替え</span>':'')+(hasGuest(s)?'<span class="badge">ゲストあり・成績外</span>':'')+(yk?'<span class="badge yk">役満 '+yk+'</span>':'')+'</span>'
       +(s.memo?'<span class="dmemo">'+esc(s.memo)+'</span>':'')+'<span class="dres">'+res+'</span></button></li>';
   }).join('')+'</ul>';
   return h;
@@ -766,6 +767,7 @@ function renderSession(s){
     +'<div class="dayhead"><div class="dh-main"><h2>'+fmtDate(s.date)+'</h2><p class="meta"><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span> '+esc(ruleText(s))+'</p>'+(s.memo?'<p class="memo">'+esc(s.memo)+'</p>':'')+'</div>'
     +(w&&!editOpen?'<button class="btn sm" data-act="edit-open">日付・ルール・メンバーを編集</button>':'')+'</div>';
   if(w&&editOpen)h+=editPanel(s);
+  if(hasGuest(s))h+='<p class="notice">ゲストがいる日なので、この日の記録は成績・ランキングには入りません（精算はそのまま使えます）。</p>';
   const due=seatDue(s);
   if(due)h+='<div class="seatbar" role="status"><span class="stick" aria-hidden="true"><i></i></span><div class="seatbar-b"><p class="seatbar-t">席替えです</p><p class="seatbar-s">'+due+'半荘が終わりました。'+(due+1)+'半荘目は席を替えてから</p></div></div>';
   if(ord.length){
@@ -841,7 +843,7 @@ function renderTotals(){
   const ids=Object.keys(t).filter(id=>t[id].played>0||t[id].chip);
   if(!ids.length)return h+'<div class="empty"><p class="e1">この条件の記録はまだありません</p><p class="e2">対局記録に半荘を追加すると、ここに累計スコアとランキングが出ます。</p></div>';
   const games=list.reduce((a,s)=>a+totalGames(s),0);
-  if(data.players.some(p=>p.guest))h+='<p class="hint">ゲストの成績は含めていません。</p>';
+  if(data.sessions.some(hasGuest))h+='<p class="hint">ゲストがいる日の記録は、成績・ランキングに含めていません。</p>';
   const key=ui.tSort==='score'?'pt':'total';
   const byPt=ids.slice().sort((a,b)=>t[b][key]-t[a][key]||t[b].pt-t[a].pt);
   const maxAbs=Math.max(1,...byPt.map(id=>Math.abs(t[id][key])));
@@ -894,7 +896,7 @@ function renderSettings(){
   const mems=data.players.filter(p=>!p.guest),guests=data.players.filter(p=>p.guest);
   h+='<ul class="plist">'+mems.map(prow).join('')+'</ul>';
   if(w)h+='<div class="addname"><input class="in" id="p-new" placeholder="新しいメンバーの名前" maxlength="20" autocomplete="off"><button class="btn sm" data-act="add-player">メンバーを追加</button></div><p class="msg" id="p-msg"></p>';
-  h+='</section><section><div class="sechead"><h2>ゲスト</h2></div><p class="hint">たまに打つ人です。対局記録と精算には出ますが、成績・ランキングには入りません。対局日を作るときや編集のときに「ゲスト」で追加できます。</p>'
+  h+='</section><section><div class="sechead"><h2>ゲスト</h2></div><p class="hint">たまに打つ人です。ゲストが入った日は、記録と精算はできますが、その日の分はメンバーも含めて成績・ランキングには入りません。対局日を作るときや編集のときに「ゲスト」で追加できます。</p>'
     +(guests.length?'<ul class="plist">'+guests.map(prow).join('')+'</ul>':'<p class="hint">まだゲストはいません。</p>');
   h+='</section><section><div class="sechead"><h2>標準ルール</h2></div><p class="hint">新しい対局日を作るときの初期値です。対局日ごとにも変えられます。1位の順位点は持ち点・返し・ほかの順位点から決まります。</p>';
   if(w){
