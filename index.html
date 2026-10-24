@@ -489,7 +489,8 @@ function gameResult(s,g){
 const gCount=g=>g.summary?(g.count||1):1;
 function ymd(x){return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');}
 function isRecent(s){const d=new Date();return s.date===ymd(d)||s.date===ymd(new Date(d.getTime()-86400000));}
-function seatDue(s){const n=totalGames(s);return n>0&&n%4===0&&s.games.length>0&&!s.games[s.games.length-1].summary&&isRecent(s)?n:0;}
+const seatEvery=s=>s.mode===3?6:4;
+function seatDue(s){const n=totalGames(s);return n>0&&n%seatEvery(s)===0&&s.games.length>0&&!s.games[s.games.length-1].summary&&isRecent(s)?n:0;}
 function totalGames(s){return s.games.reduce((a,g)=>a+gCount(g),0);}
 function gameNos(s){let n=1;return s.games.map(g=>{const c=gCount(g);const o={start:n,label:c>1?n+'〜'+(n+c-1):String(n)};n+=c;return o;});}
 function dayTotals(s){
@@ -896,7 +897,7 @@ function renderSettings(){
     +'<li>素点入力のトビ：素点がマイナスの人（0点ちょうどは除く）がトビで、飛んだ人から飛ばした人へトビの点が移ります。</li>'
     +'<li>役満祝儀：チップとして扱います（スコアには入りません）。ツモは全員からオール、ロンは放銃者が全員分を責任払い。大四喜・純正九蓮宝燈・国士無双十三面待ち・四暗刻単騎はダブル役満で、複合したら倍率を足した分（2倍・3倍）払います。包が付いた役の分だけ、ロンなら放銃者と包の人で折半、ツモなら包の人が全額払い、ほかの役の分は普通に払います。対局記録では役満ごとに祝儀の行を出し、その日のチップに足します。</li>'
     +'<li><b>まとめで入力</b>：記録が合計しか残っていない半荘をまとめて入れます。スコアと半荘数には入りますが、順位や率の成績からは外れます。</li><li>順位はスコア入力なら入れた順位、素点入力なら点数順です。素点が同じ人は同着で、順位点を分け合って同じスコアになります（1位同着なら1位の分を等分）。トビは何人同時でも、飛んだ人それぞれから飛ばした人へトビの点が移ります。</li>'
-    +'<li>チップは枚数で入れると、1枚＝2点（ルールで変更できます）でスコアに換算して足します。成績ではチップ込みとスコアのみの両方を出し、チップのランキングは枚数で出します。</li><li>その日の半荘が4回、8回、12回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
+    +'<li>チップは枚数で入れると、1枚＝2点（ルールで変更できます）でスコアに換算して足します。成績ではチップ込みとスコアのみの両方を出し、チップのランキングは枚数で出します。</li><li>その日の半荘が四麻は4回・8回・12回…、三麻は6回・12回・18回…と記録されるたびに「席替えです」と表示します。</li></ul></section>'
     +'<section><h2>データ</h2><p class="hint">全記録をテキスト（JSON）で書き出せます。バックアップや、Claudeに渡して記録を作ってもらうときに使います。</p><div class="formfoot" style="justify-content:flex-start"><button class="btn sm" data-act="copy-json">記録データをコピー</button><button class="btn sm" data-act="dl-json">ファイルで保存</button></div><div id="json-box"></div>'
     +(w?'<div class="panel"><h3>記録を取り込む</h3><p class="hint">書き出したデータや、Claudeが作った記録データ（JSON）を貼り付けて取り込みます。同じIDの対局日・メンバーは上書きされ、それ以外の記録はそのまま残ります。</p><textarea class="in" id="imp-text" rows="6" placeholder="{&quot;players&quot;:[…],&quot;sessions&quot;:[…]}"></textarea>'
       +(importDraft?'<p class="msg ok">'+esc(importDraft.summary)+'</p>':'')
@@ -1143,7 +1144,7 @@ const act={
     }
     const tg=totalGames(s);const idx=editing?s.games.findIndex(x=>x.id===editing):-1;
     const label=idx>=0?gameNos(s)[idx].label:(game.summary&&game.count>1?(tg+1)+'〜'+(tg+game.count):String(tg+1));
-    const seatN=!editing&&!game.summary&&(tg+1)%4===0?tg+1:0;
+    const seatN=!editing&&!game.summary&&(tg+1)%seatEvery(s)===0?tg+1:0;
     const op={t:'game',sid:s.id,game};
     if(save(d=>applyOp(d,op),{done:'半荘'+label+(editing?'を更新しました':'の記録を確定しました'),before:resetGameForm})&&seatN)showSeat(seatN);
   },
