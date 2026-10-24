@@ -219,6 +219,8 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 .dupwarn .formfoot{justify-content:flex-start}
 #addgame .gform .inrow{align-items:center}
 #addgame .gform .unit{flex:none;font-family:var(--num);font-weight:600;color:var(--muted);padding:0 2px 0 3px;font-size:1rem}
+.gtag{display:inline-block;font-size:.62rem;font-weight:700;line-height:1.4;border:1px solid var(--muted);color:var(--muted);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:1px;white-space:nowrap}
+.mchip[aria-pressed="true"] .gtag{border-color:currentColor;color:inherit}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -360,7 +362,7 @@ let data={v:3,players:[],sessions:[],defaults:{"3":normRule(null,3),"4":normRule
 const raw={players:new Map(),sessions:new Map(),games:new Map(),defaults:null};
 const loadedParts=new Set();let loaded=false,loadError='';
 function compose(){
-  const players=[...raw.players.entries()].map(([id,v])=>({id,name:String(v.name||''),created:v.created||0})).sort((a,b)=>a.created-b.created||a.name.localeCompare(b.name));
+  const players=[...raw.players.entries()].map(([id,v])=>({id,name:String(v.name||''),created:v.created||0,guest:!!v.guest})).sort((a,b)=>a.created-b.created||a.name.localeCompare(b.name));
   const by={};raw.games.forEach((v,id)=>{const g=clone(v);g.id=id;(by[g.sid]||(by[g.sid]=[])).push(g);});
   const sessions=[...raw.sessions.entries()].map(([id,v])=>{const s=clone(v);s.id=id;s.rule=normRule(s.rule,s.mode);s.chips=s.chips||{};s.members=s.members||[];
     s.games=(by[id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0)).map(g=>{delete g.sid;return g;});return s;});
@@ -391,6 +393,8 @@ function persistUi(){store.set('mj-ui',{tab:ui.tab,sid:ui.sid,tMode:ui.tMode,tYe
 const $=s=>document.querySelector(s);
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const isGuest=id=>{const p=data.players.find(x=>x.id===id);return !!(p&&p.guest);};
+const pLabel=id=>esc(pName(id))+(isGuest(id)?'<span class="gtag">ゲスト</span>':'');
 const pName=id=>{const p=data.players.find(x=>x.id===id);return p?p.name:'（不明）';};
 const r1=v=>Math.round(v*10)/10;
 const sc=v=>v>0?'plus':v<0?'minus':'zero';
@@ -517,7 +521,7 @@ function stats(list){
     for(const id in (s.chips||{})){const c=s.chips[id]||0;if(!c)continue;get(id).chip+=c;get(id).chipN+=c/s.rule.chip;seen.add(id);}
     seen.forEach(id=>get(id).days++);
   });
-  for(const id in t){t[id].pt=r1(t[id].pt);t[id].shugi=r1(t[id].shugi);t[id].chipN=r1(t[id].chipN);t[id].total=r1(t[id].pt+t[id].chip);}
+  for(const id in t){if(isGuest(id)){delete t[id];continue;}t[id].pt=r1(t[id].pt);t[id].shugi=r1(t[id].shugi);t[id].chipN=r1(t[id].chipN);t[id].total=r1(t[id].pt+t[id].chip);}
   return t;
 }
 
@@ -531,7 +535,7 @@ function applyOp(d,op){
 function stable(v){if(Array.isArray(v))return '['+v.map(stable).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().filter(k=>v[k]!==undefined).map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';return JSON.stringify(v);}
 function flatten(d){
   const m=new Map();
-  d.players.forEach((p,i)=>m.set('players/'+p.id,{name:p.name,created:p.created||i}));
+  d.players.forEach((p,i)=>m.set('players/'+p.id,Object.assign({name:p.name,created:p.created||i},p.guest?{guest:true}:{})));
   d.sessions.forEach(s=>{const meta=clone(s);delete meta.id;delete meta.games;m.set('sessions/'+s.id,meta);
     (s.games||[]).forEach((g,i)=>{const x=clone(g);delete x.id;x.sid=s.id;if(typeof x.seq!=='number')x.seq=i;m.set('games/'+g.id,x);});});
   m.set('config/defaults',clone(d.defaults));
@@ -575,14 +579,15 @@ function save(mutate,opts){
 function memberPicker(p,selected,locked){
   const sel=new Set(selected);
   const order=selected.concat(data.players.map(x=>x.id).filter(id=>!sel.has(id)));
-  const chips=order.map(id=>'<button type="button" class="mchip" data-act="mtoggle" data-pid="'+id+'" aria-pressed="'+sel.has(id)+'"'+(locked&&locked.has(id)?' data-locked="1" title="この日の記録があるので外せません"':'')+'>'+esc(pName(id))+'</button>').join('');
+  const chips=order.map(id=>'<button type="button" class="mchip" data-act="mtoggle" data-pid="'+id+'" aria-pressed="'+sel.has(id)+'"'+(locked&&locked.has(id)?' data-locked="1" title="この日の記録があるので外せません"':'')+'>'+pLabel(id)+'</button>').join('');
   return '<div class="field"><span class="lbl">メンバー</span><div class="mchips" id="'+p+'-members">'+chips+'</div>'
-    +'<div class="addname"><input class="in" id="'+p+'-newname" placeholder="新しいメンバーの名前" maxlength="20" autocomplete="off"><button type="button" class="btn sm" data-act="maddname" data-prefix="'+p+'">追加</button></div></div>';
+    +'<div class="addname"><input class="in" id="'+p+'-newname" placeholder="新しい人の名前" maxlength="20" autocomplete="off"><button type="button" class="btn sm" data-act="maddname" data-prefix="'+p+'">メンバー</button><button type="button" class="btn sm" data-act="maddname" data-prefix="'+p+'" data-guest="1">ゲスト</button></div>'
+    +'<p class="hint">ゲストは対局記録と精算には出ますが、成績・ランキングには入りません。</p></div>';
 }
 function collectMembers(p){
   const out=[];
   document.querySelectorAll('#'+p+'-members .mchip[aria-pressed="true"]').forEach(b=>{
-    if(b.dataset.pid)out.push({id:b.dataset.pid});else out.push({id:'p'+uid(),name:b.dataset.newname,isNew:true});
+    if(b.dataset.pid)out.push({id:b.dataset.pid});else out.push({id:'p'+uid(),name:b.dataset.newname,isNew:true,guest:b.dataset.guest==='1'});
   });
   return out;
 }
@@ -634,7 +639,7 @@ function renderLog(){
     const t=dayTotals(s);
     const ord=Object.keys(t).filter(id=>t[id].games>0||t[id].chip).sort((a,b)=>t[b].total-t[a].total);
     const yk=s.games.reduce((a,g)=>a+(g.yaku||[]).length,0);
-    const res=ord.length?ord.map(id=>'<span class="dr"><span class="nm">'+esc(pName(id))+'</span><span class="pt '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span>'+(t[id].chip?'<span class="ch">チップ'+fmtMai(t[id].chipN)+'</span>':'')+'</span>').join('')
+    const res=ord.length?ord.map(id=>'<span class="dr"><span class="nm">'+pLabel(id)+'</span><span class="pt '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span>'+(t[id].chip?'<span class="ch">チップ'+fmtMai(t[id].chipN)+'</span>':'')+'</span>').join('')
       :'<span class="none">'+s.members.map(id=>esc(pName(id))).join('・')+'（半荘はまだありません）</span>';
     return '<li><button class="day" data-act="open" data-sid="'+s.id+'"><span class="dhead"><span class="ddate">'+fmtDate(s.date)+'</span><span class="badge m'+s.mode+'">'+(s.mode===4?'四麻':'三麻')+'</span><span class="dcount">半荘'+totalGames(s)+'回</span>'+(seatDue(s)?'<span class="badge seat">席替え</span>':'')+(yk?'<span class="badge yk">役満 '+yk+'</span>':'')+'</span>'
       +(s.memo?'<span class="dmemo">'+esc(s.memo)+'</span>':'')+'<span class="dres">'+res+'</span></button></li>';
@@ -764,11 +769,11 @@ function renderSession(s){
   const due=seatDue(s);
   if(due)h+='<div class="seatbar" role="status"><span class="stick" aria-hidden="true"><i></i></span><div class="seatbar-b"><p class="seatbar-t">席替えです</p><p class="seatbar-s">'+due+'半荘が終わりました。'+(due+1)+'半荘目は席を替えてから</p></div></div>';
   if(ord.length){
-    h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+esc(pName(id))+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtMai(t[id].chipN)+'（'+fmtChip(t[id].chip)+'）</span>'+(t[id].shugi?'<br>うち祝儀 '+fmtMai(t[id].shugiN):'')+'</span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
+    h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+pLabel(id)+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtMai(t[id].chipN)+'（'+fmtChip(t[id].chip)+'）</span>'+(t[id].shugi?'<br>うち祝儀 '+fmtMai(t[id].shugiN):'')+'</span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
   }
   h+='<section><div class="sechead"><h3>半荘ごとの記録</h3>'+(w&&s.games.length?'<span class="hint">番号をタップで編集・削除</span>':'')+'</div>';
   if(!s.games.length)h+='<p class="hint">まだ半荘がありません。'+(w?'下の入力欄から1半荘ずつ記録してください。':'')+'</p>';
-  const head=all.map(id=>'<th scope="col">'+esc(pName(id))+'</th>').join('');
+  const head=all.map(id=>'<th scope="col">'+pLabel(id)+'</th>').join('');
   const nos=gameNos(s);
   const rows=s.games.map((g,i)=>{
     const r=gameResult(s,g);
@@ -836,6 +841,7 @@ function renderTotals(){
   const ids=Object.keys(t).filter(id=>t[id].played>0||t[id].chip);
   if(!ids.length)return h+'<div class="empty"><p class="e1">この条件の記録はまだありません</p><p class="e2">対局記録に半荘を追加すると、ここに累計スコアとランキングが出ます。</p></div>';
   const games=list.reduce((a,s)=>a+totalGames(s),0);
+  if(data.players.some(p=>p.guest))h+='<p class="hint">ゲストの成績は含めていません。</p>';
   const key=ui.tSort==='score'?'pt':'total';
   const byPt=ids.slice().sort((a,b)=>t[b][key]-t[a][key]||t[b].pt-t[a].pt);
   const maxAbs=Math.max(1,...byPt.map(id=>Math.abs(t[id][key])));
@@ -881,9 +887,15 @@ function renderSettings(){
   const used=id=>data.sessions.filter(s=>s.members.includes(id)).length;
   let h='<section><div class="sechead"><h2>メンバー</h2></div>';
   if(!data.players.length)h+='<p class="hint">まだメンバーがいません。対局日を作るときにも追加できます。</p>';
-  h+='<ul class="plist">'+data.players.map(p=>{const u=used(p.id);const ck=confirmKey==='p:'+p.id;
-    return '<li class="prow">'+(w?'<input class="in" id="pn-'+p.id+'" value="'+esc(p.name)+'" maxlength="20" aria-label="'+esc(p.name)+'の名前" autocomplete="off"><button class="btn sm" data-act="rename" data-pid="'+p.id+'">名前を保存</button>'+(u?'':'<button class="btn sm '+(ck?'danger':'ghost')+'" data-act="del-player" data-pid="'+p.id+'">'+(ck?'削除する':'削除')+'</button>'):'<span class="nm">'+esc(p.name)+'</span>')+'<span class="sub">'+u+'日参加</span></li>';}).join('')+'</ul>';
+  const prow=p=>{const u=used(p.id);const ck=confirmKey==='p:'+p.id;
+    return '<li class="prow">'+(w?'<input class="in" id="pn-'+p.id+'" value="'+esc(p.name)+'" maxlength="20" aria-label="'+esc(p.name)+'の名前" autocomplete="off"><button class="btn sm" data-act="rename" data-pid="'+p.id+'">名前を保存</button>'
+      +(p.guest?'<button class="btn sm" data-act="set-guest" data-pid="'+p.id+'" data-v="0">メンバーにする</button>':'')
+      +(u?'':'<button class="btn sm '+(ck?'danger':'ghost')+'" data-act="del-player" data-pid="'+p.id+'">'+(ck?'削除する':'削除')+'</button>'):'<span class="nm">'+esc(p.name)+'</span>')+'<span class="sub">'+u+'日参加</span></li>';};
+  const mems=data.players.filter(p=>!p.guest),guests=data.players.filter(p=>p.guest);
+  h+='<ul class="plist">'+mems.map(prow).join('')+'</ul>';
   if(w)h+='<div class="addname"><input class="in" id="p-new" placeholder="新しいメンバーの名前" maxlength="20" autocomplete="off"><button class="btn sm" data-act="add-player">メンバーを追加</button></div><p class="msg" id="p-msg"></p>';
+  h+='</section><section><div class="sechead"><h2>ゲスト</h2></div><p class="hint">たまに打つ人です。対局記録と精算には出ますが、成績・ランキングには入りません。対局日を作るときや編集のときに「ゲスト」で追加できます。</p>'
+    +(guests.length?'<ul class="plist">'+guests.map(prow).join('')+'</ul>':'<p class="hint">まだゲストはいません。</p>');
   h+='</section><section><div class="sechead"><h2>標準ルール</h2></div><p class="hint">新しい対局日を作るときの初期値です。対局日ごとにも変えられます。1位の順位点は持ち点・返し・ほかの順位点から決まります。</p>';
   if(w){
     h+='<div class="grid2">'+[[4,'四麻'],[3,'三麻']].map(m=>'<div class="panel"><h3>'+m[1]+'</h3>'+ruleFields('d'+m[0],m[0],data.defaults[m[0]])+'</div>').join('')+'</div>'
@@ -1031,7 +1043,7 @@ const act={
     const box=$('#'+p+'-members');
     const ex=data.players.find(x=>x.name===name);
     let chip=ex?box.querySelector('[data-pid="'+ex.id+'"]'):[...box.querySelectorAll('[data-newname]')].find(x=>x.dataset.newname===name);
-    if(!chip){chip=document.createElement('button');chip.type='button';chip.className='mchip';chip.dataset.act='mtoggle';chip.dataset.newname=name;chip.textContent=name;box.appendChild(chip);}
+    if(!chip){chip=document.createElement('button');chip.type='button';chip.className='mchip';chip.dataset.act='mtoggle';chip.dataset.newname=name;if(b.dataset.guest)chip.dataset.guest='1';chip.innerHTML=esc(name)+(b.dataset.guest?'<span class="gtag">ゲスト</span>':'');box.appendChild(chip);}
     chip.setAttribute('aria-pressed','true');inp.value='';inp.focus();
   },
   flip(b){const el=document.getElementById(b.dataset.for);if(!el)return;const v=el.value.trim();el.value=/^[-−▲ー]/.test(v)?v.replace(/^[-−▲ー]+/,''):'-'+v.replace(/^\+/,'');el.focus();el.dispatchEvent(new Event('input',{bubbles:true}));},
@@ -1040,7 +1052,7 @@ const act={
     const mem=collectMembers('n');if(mem.length<nsMode)return setMsg('n-msg','メンバーを'+nsMode+'人以上選んでください','err');
     const rr=readRule('n',nsMode);if(rr.err)return setMsg('n-msg',rr.err,'err');
     const sid='s'+uid();const memo=$('#n-memo').value.trim();const mode=nsMode;
-    save(d=>{mem.forEach((m,k)=>{if(m.isNew)d.players.push({id:m.id,name:m.name,created:Date.now()+k});});d.sessions.push({id:sid,date,mode,rule:rr.rule,members:mem.map(m=>m.id),games:[],chips:{},memo,created:Date.now()});},
+    save(d=>{mem.forEach((m,k)=>{if(m.isNew)d.players.push(Object.assign({id:m.id,name:m.name,created:Date.now()+k},m.guest?{guest:true}:{}));});d.sessions.push({id:sid,date,mode,rule:rr.rule,members:mem.map(m=>m.id),games:[],chips:{},memo,created:Date.now()});},
       {ui:{tab:'log',sid},done:'対局日を作成しました',before(){newOpen=false;}});
   },
   'edit-open'(){editOpen=true;render();},
@@ -1051,7 +1063,7 @@ const act={
     const lk=lockedIds(s);for(const id of lk){if(!mem.some(m=>m.id===id))return setMsg('e-msg','記録があるメンバーは外せません','err');}
     const rr=readRule('e',s.mode);if(rr.err)return setMsg('e-msg',rr.err,'err');
     const memo=$('#e-memo').value.trim();
-    save(d=>{mem.forEach((m,k)=>{if(m.isNew)d.players.push({id:m.id,name:m.name,created:Date.now()+k});});const x=d.sessions.find(y=>y.id===s.id);x.date=date;x.memo=memo;x.rule=rr.rule;x.members=mem.map(m=>m.id);},
+    save(d=>{mem.forEach((m,k)=>{if(m.isNew)d.players.push(Object.assign({id:m.id,name:m.name,created:Date.now()+k},m.guest?{guest:true}:{}));});const x=d.sessions.find(y=>y.id===s.id);x.date=date;x.memo=memo;x.rule=rr.rule;x.members=mem.map(m=>m.id);},
       {done:'この日の設定を保存しました',before(){editOpen=false;}});
   },
   'g-kind'(b){
@@ -1179,6 +1191,7 @@ const act={
     if(data.players.some(p=>p.name===name))return setMsg('p-msg','同じ名前のメンバーがいます','err');
     const id='p'+uid();save(d=>{d.players.push({id,name,created:Date.now()});},{done:name+' を追加しました'});
   },
+  'set-guest'(b){const id=b.dataset.pid,g=b.dataset.v==='1';save(d=>{const p=d.players.find(x=>x.id===id);if(p){if(g)p.guest=true;else delete p.guest;}},{done:g?'ゲストにしました':'メンバーにしました'});},
   'del-player'(b){
     const id=b.dataset.pid;const key='p:'+id;if(confirmKey!==key){confirmKey=key;render();return;}
     confirmKey=null;save(d=>{d.players=d.players.filter(p=>p.id!==id);},{done:'メンバーを削除しました'});
@@ -1216,7 +1229,7 @@ const act={
   'imp-run'(){
     const src=importDraft&&importDraft.d;if(!src)return;
     save(d=>{
-      src.players.forEach((p,i)=>{const ex=d.players.find(x=>x.id===p.id);if(ex)ex.name=p.name;else d.players.push({id:p.id,name:p.name,created:typeof p.created==='number'?p.created:Date.now()+i});});
+      src.players.forEach((p,i)=>{const ex=d.players.find(x=>x.id===p.id);if(ex){ex.name=p.name;if(p.guest)ex.guest=true;}else d.players.push(Object.assign({id:p.id,name:p.name,created:typeof p.created==='number'?p.created:Date.now()+i},p.guest?{guest:true}:{}));});
       src.sessions.forEach(s=>{const n=clone(s);n.rule=normRule(n.rule,n.mode);n.chips=n.chips||{};n.memo=n.memo||'';if(typeof n.created!=='number')n.created=Date.now();
         n.games=n.games.map((g,i)=>{const x=clone(g);if(typeof x.seq!=='number')x.seq=i;return x;});
         const i=d.sessions.findIndex(x=>x.id===n.id);if(i>=0)d.sessions[i]=n;else d.sessions.push(n);});
