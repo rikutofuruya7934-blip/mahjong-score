@@ -508,7 +508,7 @@ function dayTotals(s){
 const hasGuest=s=>s.members.some(isGuest);
 function filtered(mode,year){return data.sessions.filter(s=>!hasGuest(s)&&(mode==='all'||String(s.mode)===mode)&&(year==='all'||s.date.slice(0,4)===year));}
 function stats(list){
-  const t={};const mk=()=>({pt:0,games:0,played:0,r:[0,0,0,0],rankSum:0,last:0,tobi:0,bust:0,best:null,chip:0,chipN:0,shugi:0,yaku:0,ykList:[],hoju:0,days:0});
+  const t={};const mk=()=>({pt:0,games:0,played:0,r:[0,0,0,0],rankSum:0,last:0,tobi:0,bust:0,best:null,rawN:0,rawSum:0,rawMax:null,rawMin:null,uki:0,chip:0,chipN:0,shugi:0,yaku:0,ykList:[],hoju:0,days:0});
   const get=id=>t[id]||(t[id]=mk());
   list.forEach(s=>{
     const seen=new Set();
@@ -516,7 +516,8 @@ function stats(list){
       const r=gameResult(s,g);const ids=Object.keys(r);const n=ids.length;
       if(g.summary){ids.forEach(id=>{const x=get(id);x.pt+=r[id].pt;x.played+=gCount(g);seen.add(id);});return;}
       ids.forEach(id=>{const x=get(id),v=r[id];x.pt+=v.pt;x.games++;x.played++;x.r[v.rank-1]++;x.rankSum+=v.rank;if(v.last!==undefined?v.last:v.rank===n)x.last++;if(v.tobi)x.tobi++;x.bust+=v.bust;
-        if(!x.best||v.pt>x.best.pt)x.best={pt:v.pt,raw:v.raw,date:s.date};seen.add(id);});
+        if(!x.best||v.pt>x.best.pt)x.best={pt:v.pt,raw:v.raw,date:s.date};
+        if(v.raw!==null&&v.raw!==undefined){x.rawN++;x.rawSum+=v.raw;if(v.raw>=s.rule.ret)x.uki++;if(!x.rawMax||v.raw>x.rawMax.v)x.rawMax={v:v.raw,date:s.date};if(!x.rawMin||v.raw<x.rawMin.v)x.rawMin={v:v.raw,date:s.date};}seen.add(id);});
       (g.yaku||[]).forEach(y=>{if(!r[y.pid])return;const w=get(y.pid);w.yaku++;w.ykList.push(yakuNames(y)+'・'+(y.how==='tsumo'?'ツモ':'ロン'));if(y.how==='ron'&&r[y.from])get(y.from).hoju++;const p=shugiPay(y,ids);for(const k in p){const z=get(k);z.shugi+=p[k];z.chip+=p[k];z.chipN+=p[k]/s.rule.chip;seen.add(k);}});
     });
     for(const id in (s.chips||{})){const c=s.chips[id]||0;if(!c)continue;get(id).chip+=c;get(id).chipN+=c/s.rule.chip;seen.add(id);}
@@ -882,6 +883,22 @@ function renderTotals(){
   if(ykIds.length)cards.push(rankCard('役満','和了回数',ykIds.map(id=>({id,v:t[id].yaku})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:r.v+'回',sub:ykSub(t[r.id])}))));
   const hasSum=list.some(s=>s.games.some(g=>g.summary));
   h+='<section><h3>ランキング</h3>'+(hasSum?'<p class="hint">順位・率・最高スコアは、合計だけ残っている「まとめ」の半荘を除いて計算しています。</p>':'')+'<div class="cards">'+cards.join('')+'</div></section>';
+  /* 素点ランキング：素点入力で記録した半荘だけ */
+  const rawIds=ids.filter(id=>t[id].rawN>0);
+  h+='<section><h3>素点ランキング</h3>';
+  if(ui.tMode==='all')h+='<p class="hint">四麻と三麻で持ち点が違うので、素点ランキングは「四麻」か「三麻」を選んだときに出ます。</p>';
+  else if(!rawIds.length)h+='<p class="hint">この条件では、素点入力で記録した半荘はまだありません。</p>';
+  else{
+    const rawN=list.reduce((a,s)=>a+s.games.filter(g=>g.scores&&!g.summary).length,0);
+    const rRated=rawIds.filter(id=>t[id].rawN>=tMin);
+    const rc=[];
+    rc.push(rankCard('平均素点',minNote,rRated.map(id=>({id,v:t[id].rawSum/t[id].rawN})).sort((a,b)=>b.v-a.v||t[b.id].rawN-t[a.id].rawN).map(r=>({id:r.id,v:r.v,label:fmtScore(Math.round(r.v/10)*10),sub:t[r.id].rawN+'半荘'}))));
+    rc.push(rankCard('浮き率',note('返し以上で終了',minNote),rRated.map(id=>({id,v:t[id].uki/t[id].rawN})).sort((a,b)=>b.v-a.v||t[b.id].rawN-t[a.id].rawN).map(r=>({id:r.id,v:r.v,label:pct(r.v),sub:'浮き'+t[r.id].uki+'回 / '+t[r.id].rawN+'半荘'}))));
+    rc.push(rankCard('最高素点','1半荘',rawIds.map(id=>({id,v:t[id].rawMax.v})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:fmtScore(r.v),sub:shortDate(t[r.id].rawMax.date)}))));
+    rc.push(rankCard('最低素点','高い順',rawIds.map(id=>({id,v:t[id].rawMin.v})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:fmtScore(r.v),sub:shortDate(t[r.id].rawMin.date)}))));
+    h+='<p class="hint">素点入力で記録した半荘だけで集計しています（'+rawN+'半荘）。</p><div class="cards">'+rc.join('')+'</div>';
+  }
+  h+='</section>';
   return h;
 }
 function renderSettings(){
