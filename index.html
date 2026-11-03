@@ -508,7 +508,7 @@ function dayTotals(s){
 const hasGuest=s=>s.members.some(isGuest);
 function filtered(mode,year){return data.sessions.filter(s=>!hasGuest(s)&&(mode==='all'||String(s.mode)===mode)&&(year==='all'||s.date.slice(0,4)===year));}
 function stats(list){
-  const t={};const mk=()=>({pt:0,games:0,played:0,r:[0,0,0,0],rankSum:0,last:0,tobi:0,bust:0,best:null,rawN:0,rawSum:0,rawMax:null,rawMin:null,uki:0,chip:0,chipN:0,shugi:0,yaku:0,ykList:[],hoju:0,days:0});
+  const t={};const mk=()=>({pt:0,games:0,played:0,r:[0,0,0,0],rankSum:0,last:0,tobi:0,bust:0,best:null,rawN:0,rawSum:0,rawDiff:0,rawMax:null,rawMin:null,uki:0,chip:0,chipN:0,shugi:0,yaku:0,ykList:[],hoju:0,days:0});
   const get=id=>t[id]||(t[id]=mk());
   list.forEach(s=>{
     const seen=new Set();
@@ -517,7 +517,7 @@ function stats(list){
       if(g.summary){ids.forEach(id=>{const x=get(id);x.pt+=r[id].pt;x.played+=gCount(g);seen.add(id);});return;}
       ids.forEach(id=>{const x=get(id),v=r[id];x.pt+=v.pt;x.games++;x.played++;x.r[v.rank-1]++;x.rankSum+=v.rank;if(v.last!==undefined?v.last:v.rank===n)x.last++;if(v.tobi)x.tobi++;x.bust+=v.bust;
         if(!x.best||v.pt>x.best.pt)x.best={pt:v.pt,raw:v.raw,date:s.date};
-        if(v.raw!==null&&v.raw!==undefined){x.rawN++;x.rawSum+=v.raw;if(v.raw>=s.rule.ret)x.uki++;if(!x.rawMax||v.raw>x.rawMax.v)x.rawMax={v:v.raw,date:s.date};if(!x.rawMin||v.raw<x.rawMin.v)x.rawMin={v:v.raw,date:s.date};}seen.add(id);});
+        if(v.raw!==null&&v.raw!==undefined){x.rawN++;x.rawSum+=v.raw;x.rawDiff+=v.raw-s.rule.start;if(v.raw>=s.rule.ret)x.uki++;if(!x.rawMax||v.raw>x.rawMax.v)x.rawMax={v:v.raw,date:s.date};if(!x.rawMin||v.raw<x.rawMin.v)x.rawMin={v:v.raw,date:s.date};}seen.add(id);});
       (g.yaku||[]).forEach(y=>{if(!r[y.pid])return;const w=get(y.pid);w.yaku++;w.ykList.push(yakuNames(y)+'・'+(y.how==='tsumo'?'ツモ':'ロン'));if(y.how==='ron'&&r[y.from])get(y.from).hoju++;const p=shugiPay(y,ids);for(const k in p){const z=get(k);z.shugi+=p[k];z.chip+=p[k];z.chipN+=p[k]/s.rule.chip;seen.add(k);}});
     });
     for(const id in (s.chips||{})){const c=s.chips[id]||0;if(!c)continue;get(id).chip+=c;get(id).chipN+=c/s.rule.chip;seen.add(id);}
@@ -892,6 +892,8 @@ function renderTotals(){
     const rawN=list.reduce((a,s)=>a+s.games.filter(g=>g.scores&&!g.summary).length,0);
     const rRated=rawIds.filter(id=>t[id].rawN>=tMin);
     const rc=[];
+    const st0=fmtScore(ui.tMode==='3'?35000:25000);
+    rc.push(rankCard('累計素点',st0+'点からの増減の合計',rawIds.map(id=>({id,v:t[id].rawDiff})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:(r.v>0?'+':r.v<0?'−':'±')+fmtScore(Math.abs(r.v)),cls:sc(r.v),sub:t[r.id].rawN+'半荘・1半荘あたり '+(r.v/t[r.id].rawN>0?'+':r.v<0?'−':'±')+fmtScore(Math.abs(Math.round(r.v/t[r.id].rawN/10)*10))}))));
     rc.push(rankCard('平均素点',minNote,rRated.map(id=>({id,v:t[id].rawSum/t[id].rawN})).sort((a,b)=>b.v-a.v||t[b.id].rawN-t[a.id].rawN).map(r=>({id:r.id,v:r.v,label:fmtScore(Math.round(r.v/10)*10),sub:t[r.id].rawN+'半荘'}))));
     rc.push(rankCard('浮き率',note('返し以上で終了',minNote),rRated.map(id=>({id,v:t[id].uki/t[id].rawN})).sort((a,b)=>b.v-a.v||t[b.id].rawN-t[a.id].rawN).map(r=>({id:r.id,v:r.v,label:pct(r.v),sub:'浮き'+t[r.id].uki+'回 / '+t[r.id].rawN+'半荘'}))));
     rc.push(rankCard('最高素点','1半荘',rawIds.map(id=>({id,v:t[id].rawMax.v})).sort((a,b)=>b.v-a.v).map(r=>({id:r.id,v:r.v,label:fmtScore(r.v),sub:shortDate(t[r.id].rawMax.date)}))));
