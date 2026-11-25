@@ -28,16 +28,17 @@ textarea.in{resize:vertical;font-family:var(--num);font-size:14px;line-height:1.
 :root{
   --bg:#eef1ec; --surface:#fbfcf8; --surface-2:#e2e8df; --line:#cbd4c9; --fg:#17201a; --muted:#56635a;
   --accent:#17694a; --accent-ink:#f3fbf6; --plus:#1c52a0; --minus:#bf3528; --gold:#9c700f; --stick:#fffdf5; --dot:#d2382a;
+  --s1:#257de0; --s2:#f47230; --s3:#00b894; --s4:#f2a600; --s5:#ee7fac; --s6:#008a17; --s7:#6a4ce2; --s8:#ec4647;
   --display:"Dela Gothic One","Hiragino Kaku Gothic StdN","Yu Gothic",sans-serif;
   --body:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
   --num:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f1512; --surface:#161e1a; --surface-2:#202a25; --line:#2f3c35; --fg:#e6ede8; --muted:#9aa89f;
-  --accent:#45b487; --accent-ink:#04140c; --plus:#8ab7ff; --minus:#ff8c7c; --gold:#e3b650; --stick:#ebe6d6; --dot:#e2493a; color-scheme:dark}}
+  --accent:#45b487; --accent-ink:#04140c; --plus:#8ab7ff; --minus:#ff8c7c; --gold:#e3b650; --stick:#ebe6d6; --dot:#e2493a; --s1:#338ced; --s2:#e76624; --s3:#00a888; --s4:#d28e05; --s5:#e24d8b; --s6:#0aac23; --s7:#9887ef; --s8:#eb6263; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1512; --surface:#161e1a; --surface-2:#202a25; --line:#2f3c35; --fg:#e6ede8; --muted:#9aa89f;
-  --accent:#45b487; --accent-ink:#04140c; --plus:#8ab7ff; --minus:#ff8c7c; --gold:#e3b650; --stick:#ebe6d6; --dot:#e2493a; color-scheme:dark}
+  --accent:#45b487; --accent-ink:#04140c; --plus:#8ab7ff; --minus:#ff8c7c; --gold:#e3b650; --stick:#ebe6d6; --dot:#e2493a; --s1:#338ced; --s2:#e76624; --s3:#00a888; --s4:#d28e05; --s5:#e24d8b; --s6:#0aac23; --s7:#9887ef; --s8:#eb6263; color-scheme:dark}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.6;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 96px}
 .wrap{max-width:900px;margin:0 auto}
@@ -221,6 +222,26 @@ thead th{font-size:.82rem;color:var(--muted);font-weight:700;text-align:center;b
 #addgame .gform .unit{flex:none;font-family:var(--num);font-weight:600;color:var(--muted);padding:0 2px 0 3px;font-size:1rem}
 .gtag{display:inline-block;font-size:.62rem;font-weight:700;line-height:1.4;border:1px solid var(--muted);color:var(--muted);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:1px;white-space:nowrap}
 .mchip[aria-pressed="true"] .gtag{border-color:currentColor;color:inherit}
+.lchart{position:relative;width:100%;min-height:210px;touch-action:pan-y}
+.lchart svg{display:block;max-width:100%;height:auto;overflow:visible}
+.lc-grid{stroke:var(--line);stroke-width:1}
+.lc-zero{stroke:var(--muted);stroke-width:1.2}
+.lc-tick{fill:var(--muted);font:500 10.5px var(--num)}
+.lc-line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.lc-line.dash{stroke-dasharray:5 4}
+.lc-dot{stroke:var(--surface);stroke-width:2}
+.lc-end{fill:var(--fg);font:700 11px var(--body)}
+.lc-cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.lc-hit{fill:transparent;cursor:crosshair}
+.lc-tip{position:absolute;z-index:3;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:.78rem;box-shadow:0 4px 14px rgba(0,0,0,.18);min-width:9em}
+.lc-tip p{display:flex;align-items:center;gap:6px;margin:0;line-height:1.5}
+.lc-tip p b{margin-left:auto;padding-left:10px;font-family:var(--num);font-weight:600}
+.lc-tip .lc-th{color:var(--muted);font-weight:700;margin-bottom:2px}
+.lc-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.82rem}
+.lc-li{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+.lc-li b{font-family:var(--num);font-weight:600;margin-left:4px}
+.lc-sw{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:4px;flex:none}
+.lc-sw.dash{background-image:linear-gradient(90deg,transparent 50%,var(--surface) 50%)!important;background-size:6px 3px}
 /* totals */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .period{color:var(--muted);font-size:.85rem}
@@ -393,6 +414,53 @@ function persistUi(){store.set('mj-ui',{tab:ui.tab,sid:ui.sid,tMode:ui.tMode,tYe
 const $=s=>document.querySelector(s);
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+/* ---------- line charts (inline SVG, drawn after render at the real width) ---------- */
+const charts=new Map();let chartSeq=0;
+function colorOf(id){if(isGuest(id))return 'var(--muted)';const mem=data.players.filter(p=>!p.guest);const i=mem.findIndex(p=>p.id===id);return 'var(--s'+((i<0?0:i)%8+1)+')';}
+function chartBox(spec){
+  const id='lc'+(++chartSeq);charts.set(id,spec);
+  const fin=sr=>{for(let i=sr.values.length-1;i>=0;i--)if(sr.values[i]!==null)return sr.values[i];return 0;};
+  const leg=spec.series.slice().sort((a,b)=>fin(b)-fin(a)).map(sr=>'<span class="lc-li"><i class="lc-sw'+(sr.dash?' dash':'')+'" style="background:'+sr.color+'"></i>'+esc(sr.name)+' <b class="'+sc(fin(sr))+'">'+fmtTot(fin(sr))+'</b></span>').join('');
+  return '<div class="lchart" id="'+id+'" role="img" aria-label="'+esc(spec.title)+'"></div><div class="lc-legend">'+leg+'</div>';
+}
+function niceStep(range,count){const raw=range/Math.max(1,count);const p=Math.pow(10,Math.floor(Math.log10(raw)));const f=raw/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p;}
+function drawLine(el,sp){
+  const W=Math.max(260,Math.round(el.clientWidth)),H=Math.round(Math.min(300,Math.max(210,W*0.56)));
+  const m={l:40,r:68,t:12,b:24},pw=W-m.l-m.r,ph=H-m.t-m.b,n=sp.x.length;
+  let lo=0,hi=0;sp.series.forEach(sr=>sr.values.forEach(v=>{if(v!==null){lo=Math.min(lo,v);hi=Math.max(hi,v);}}));
+  if(hi-lo<10){hi+=5;lo-=5;}
+  const step=niceStep(hi-lo,ph<180?4:5);lo=Math.floor(lo/step)*step;hi=Math.ceil(hi/step)*step;
+  const X=i=>m.l+(n<2?pw/2:i*pw/(n-1)),Y=v=>m.t+(hi-v)/(hi-lo)*ph;
+  let g='';
+  for(let v=lo;v<=hi+1e-9;v+=step){const y=Y(v).toFixed(1);g+='<line class="'+(Math.abs(v)<1e-9?'lc-zero':'lc-grid')+'" x1="'+m.l+'" x2="'+(m.l+pw)+'" y1="'+y+'" y2="'+y+'"/><text class="lc-tick" x="'+(m.l-6)+'" y="'+y+'" dy="0.32em" text-anchor="end">'+(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v))+'</text>';}
+  const every=Math.max(1,Math.ceil(n/Math.max(2,Math.floor(pw/38))));
+  sp.x.forEach((lab,i)=>{if(i%every&&i!==n-1)return;if(i!==n-1&&n-1-i<every&&i%every===0&&i!==0)return;g+='<text class="lc-tick" x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+esc(lab)+'</text>';});
+  let lines='',dots='';const ends=[];
+  sp.series.forEach(sr=>{
+    let d='',pen=false,last=null;
+    sr.values.forEach((v,i)=>{if(v===null){pen=false;return;}d+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);pen=true;last=i;});
+    lines+='<path class="lc-line'+(sr.dash?' dash':'')+'" d="'+d+'" style="stroke:'+sr.color+'"/>';
+    if(last!==null){dots+='<circle class="lc-dot" cx="'+X(last).toFixed(1)+'" cy="'+Y(sr.values[last]).toFixed(1)+'" r="4" style="fill:'+sr.color+'"/>';ends.push({y:Y(sr.values[last]),x:X(last),name:sr.name});}
+  });
+  ends.sort((a,b)=>a.y-b.y);for(let i=1;i<ends.length;i++)if(ends[i].y-ends[i-1].y<13)ends[i].y=ends[i-1].y+13;
+  const over=ends.length?ends[ends.length-1].y-(m.t+ph):0;if(over>0)ends.forEach(e=>e.y-=over);
+  const labs=ends.map(e=>'<text class="lc-end" x="'+(e.x+8).toFixed(1)+'" y="'+e.y.toFixed(1)+'" dy="0.32em">'+esc(e.name.length>5?e.name.slice(-4):e.name)+'</text>').join('');
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'">'+g+lines+dots+labs+'<line class="lc-cross" y1="'+m.t+'" y2="'+(m.t+ph)+'" x1="-9" x2="-9"/><rect class="lc-hit" x="'+m.l+'" y="0" width="'+pw+'" height="'+H+'"/></svg><div class="lc-tip" hidden></div>';
+  const svg=el.querySelector('svg'),cross=el.querySelector('.lc-cross'),tip=el.querySelector('.lc-tip');
+  const show=ev=>{
+    const r=svg.getBoundingClientRect();const px=(ev.clientX-r.left)*W/r.width;
+    const i=Math.max(0,Math.min(n-1,Math.round(n<2?0:(px-m.l)/pw*(n-1))));
+    cross.setAttribute('x1',X(i));cross.setAttribute('x2',X(i));
+    const rows=sp.series.map(sr=>({sr,v:sr.values[i]})).filter(o=>o.v!==null).sort((a,b)=>b.v-a.v);
+    tip.innerHTML='<p class="lc-th">'+esc(sp.xTitle?sp.xTitle(i):sp.x[i])+'</p>'+rows.map(o=>'<p><i class="lc-sw'+(o.sr.dash?' dash':'')+'" style="background:'+o.sr.color+'"></i>'+esc(o.sr.name)+'<b class="'+sc(o.v)+'">'+fmtTot(o.v)+'</b></p>').join('');
+    tip.hidden=false;const tx=X(i)*r.width/W;const tw=tip.offsetWidth;
+    tip.style.left=Math.max(0,Math.min(r.width-tw,tx+(tx>r.width/2?-tw-10:10)))+'px';tip.style.top='4px';
+  };
+  const hide=()=>{tip.hidden=true;cross.setAttribute('x1',-9);cross.setAttribute('x2',-9);};
+  svg.addEventListener('pointermove',show);svg.addEventListener('pointerdown',show);svg.addEventListener('pointerleave',hide);
+}
+function drawCharts(){document.querySelectorAll('.lchart').forEach(el=>{const sp=charts.get(el.id);if(sp)drawLine(el,sp);});}
+let rzT=null;window.addEventListener('resize',()=>{clearTimeout(rzT);rzT=setTimeout(drawCharts,150);});
 const isGuest=id=>{const p=data.players.find(x=>x.id===id);return !!(p&&p.guest);};
 const pLabel=id=>esc(pName(id))+(isGuest(id)?'<span class="gtag">ゲスト</span>':'');
 const pName=id=>{const p=data.players.find(x=>x.id===id);return p?p.name:'（不明）';};
@@ -774,6 +842,15 @@ function renderSession(s){
   if(ord.length){
     h+='<section><h3>この日の合計（チップ込み）</h3><ol class="rank">'+ord.map((id,i)=>'<li><span class="pos">'+(i+1)+'</span><span class="nm">'+pLabel(id)+'</span><span class="pt big '+sc(t[id].total)+'">'+fmtTot(t[id].total)+'</span><span class="sub">スコア <span class="'+sc(t[id].pt)+'">'+fmtTot(t[id].pt)+'</span>・チップ <span class="'+sc(t[id].chip)+'">'+fmtMai(t[id].chipN)+'（'+fmtChip(t[id].chip)+'）</span>'+(t[id].shugi?'<br>うち祝儀 '+fmtMai(t[id].shugiN):'')+'</span><span class="sub">'+t[id].games+'半荘</span></li>').join('')+'</ol></section>';
   }
+  if(s.games.length&&ord.length){
+    const nos2=gameNos(s),xs=['開始'],acc={};ord.forEach(id=>acc[id]=0);
+    const ser=ord.map(id=>({id,name:pName(id),color:colorOf(id),dash:isGuest(id),values:[0]}));
+    s.games.forEach((g,gi)=>{const r=gameResult(s,g);xs.push(nos2[gi].label);ser.forEach(sr=>{if(r[sr.id])acc[sr.id]+=r[sr.id].pt;sr.values.push(r1(acc[sr.id]));});});
+    const hasChip=ord.some(id=>t[id].chip);
+    if(hasChip){xs.push('チップ');ser.forEach(sr=>sr.values.push(r1(acc[sr.id]+t[sr.id].chip)));}
+    h+='<section><h3>この日の浮き沈み</h3><p class="hint">半荘ごとのスコアの累計'+(hasChip?'。最後の点はチップ込み':'')+'。グラフをタップすると、その時点の数字が出ます。</p>'
+      +chartBox({title:'この日の浮き沈み',x:xs,series:ser,xTitle:i=>i===0?'開始':xs[i]==='チップ'?'チップ込み':'半荘'+xs[i]+'まで'})+'</section>';
+  }
   h+='<section><div class="sechead"><h3>半荘ごとの記録</h3>'+(w&&s.games.length?'<span class="hint">番号をタップで編集・削除</span>':'')+'</div>';
   if(!s.games.length)h+='<p class="hint">まだ半荘がありません。'+(w?'下の入力欄から1半荘ずつ記録してください。':'')+'</p>';
   const head=all.map(id=>'<th scope="col">'+pLabel(id)+'</th>').join('');
@@ -859,6 +936,15 @@ function renderTotals(){
         +'<span class="ts">'+(key==='pt'?'チップ込み <b class="'+sc(x.total)+'">'+fmtTot(x.total)+'</b>':'スコア <b class="'+sc(x.pt)+'">'+fmtTot(x.pt)+'</b>')+'・チップ <b class="'+sc(x.chip)+'">'+fmtChip(x.chip)+'</b></span>'
         +'<span class="ts">'+x.played+'半荘・平均順位 '+(x.games?(x.rankSum/x.games).toFixed(2):'—')+'・'+x.days+'日参加</span>'
         +'<span class="bar"><i class="'+sc(v)+'" style="'+(v>=0?'left':'right')+':50%;width:'+wpct+'%"></i></span></li>';}).join('')+'</ol></section>';
+  {
+    const days=list.slice().sort((a,b)=>a.date.localeCompare(b.date)||(a.created||0)-(b.created||0));
+    if(days.length){
+      const xs=['開始'],acc={},ser=byPt.map(id=>{acc[id]=0;return {id,name:pName(id),color:colorOf(id),values:[0]};});
+      days.forEach(d=>{const dt=dayTotals(d);const a=d.date.split('-').map(Number);xs.push(a[1]+'/'+a[2]);ser.forEach(sr=>{if(dt[sr.id])acc[sr.id]+=dt[sr.id][key];sr.values.push(r1(acc[sr.id]));});});
+      h+='<section><h3>累計の推移</h3><p class="hint">対局日ごとの'+(key==='pt'?'スコアのみ':'チップ込み')+'の累計（上の並び順の切り替えと連動）。グラフをタップすると、その日の時点の数字が出ます。</p>'
+        +chartBox({title:'累計の推移',x:xs,series:ser,xTitle:i=>i===0?'開始':shortDate(days[i-1].date)+(days[i-1].mode===3?'（三麻）':'')})+'</section>';
+    }
+  }
   const yks=[];
   list.forEach(s=>{const nos=gameNos(s);s.games.forEach((g,i)=>(g.yaku||[]).forEach(y=>yks.push({s,y,no:nos[i].label,st:nos[i].start})));});
   yks.sort((a,b)=>b.s.date.localeCompare(a.s.date)||b.st-a.st);
@@ -953,6 +1039,7 @@ function restoreForm(k){
 }
 function render(opt){
   const keep=opt&&opt.keep?captureForm():null;
+  charts.clear();chartSeq=0;
   let main='';
   const s=ui.sid&&data.sessions.find(x=>x.id===ui.sid);
   if(!CONFIGURED)main='<div class="empty"><p class="e1">Firebaseの設定がまだです</p><p class="e2">index.html の先頭にある設定欄に、Firebaseのプロジェクト設定を貼り付けてください。</p></div>';
@@ -967,6 +1054,7 @@ function render(opt){
       :'<p class="notice">見るだけモードです。記録するには右上の「記録する」から合言葉を入れてください。</p>';
   }
   app.innerHTML=renderHeader()+'<main class="wrap">'+top+main+'</main>';
+  drawCharts();
   if(loaded&&ui.tab==='log'&&s&&canWrite===true){
     if(gEditId){const g=s.games.find(x=>x.id===gEditId);if(g)fillGameForm(g);else resetGameForm();}
   }
